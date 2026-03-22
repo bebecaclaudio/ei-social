@@ -1,179 +1,155 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { db } from './firebase-config' 
+import { 
+  collection, 
+  addDoc, 
+  query, 
+  orderBy, 
+  onSnapshot, 
+  serverTimestamp,
+  doc,
+  updateDoc,
+  increment 
+} from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
 
 function Feed({ onPerfil, onComunidades }) {
-  const [posts, setPosts] = useState([
-    { id: 1, usuario: 'Maria Silva', texto: 'Saudades do Orkut!', curtidas: 42, curtido: false, avatar: '👩' },
-    { id: 2, usuario: 'Joao Santos', texto: 'Ei e a melhor rede social BR!', curtidas: 87, curtido: false, avatar: '👨' },
-    { id: 3, usuario: 'Ana Costa', texto: 'Alguem lembra dos scraps? Que nostalgia...', curtidas: 31, curtido: false, avatar: '👩' },
-  ])
-
+  const [posts, setPosts] = useState([])
   const [novoPost, setNovoPost] = useState('')
   const [focado, setFocado] = useState(false)
   const [eiEnviados, setEiEnviados] = useState([])
   const [toast, setToast] = useState(null)
 
-  function publicar() {
+  // 1. ESCUTAR O BANCO DE DADOS (Tempo Real)
+  useEffect(() => {
+    const q = query(collection(db, "posts"), orderBy("data", "desc"));
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const postsFirebase = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setPosts(postsFirebase);
+    });
+
+    return () => unsubscribe(); // Limpa a conexão ao fechar a página
+  }, []);
+
+  // 2. PUBLICAR NO FIREBASE
+  async function publicar() {
     if (novoPost.trim() === '') return
-    const post = {
-      id: Date.now(),
-      usuario: 'Voce',
-      texto: novoPost,
-      curtidas: 0,
-      curtido: false,
-      avatar: '🧑'
+    
+    try {
+      await addDoc(collection(db, "posts"), {
+        usuario: 'Sofia Rebeca',
+        texto: novoPost,
+        curtidas: 0,
+        avatar: '🧑',
+        data: serverTimestamp()
+      });
+      setNovoPost('');
+    } catch (error) {
+      console.error("Erro ao salvar:", error);
     }
-    setPosts([post, ...posts])
-    setNovoPost('')
   }
 
-  function curtir(id) {
-    setPosts(posts.map(function(post) {
-      if (post.id === id) {
-        return {
-          ...post,
-          curtido: !post.curtido,
-          curtidas: post.curtido ? post.curtidas - 1 : post.curtidas + 1
-        }
-      }
-      return post
-    }))
+  // 3. CURTIR (Atualiza no Firebase)
+  async function curtir(id, jaCurtido) {
+    const postRef = doc(db, "posts", id);
+    await updateDoc(postRef, {
+      curtidas: increment(jaCurtido ? -1 : 1)
+    });
   }
 
   function mandarEi(postId, usuario) {
     if (eiEnviados.includes(postId)) return
     setEiEnviados([...eiEnviados, postId])
-    setToast('Ei mandado para ' + usuario + '! 👋')
-    setTimeout(function() { setToast(null) }, 3000)
+    setToast(`Ei mandado para ${usuario}! 👋`)
+    setTimeout(() => setToast(null), 3000)
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
-
-      {/* Toast de notificacao */}
+    <div style={{ minHeight: '100vh', background: '#f0f2f5', fontFamily: 'sans-serif' }}>
+      
+      {/* Notificação Toast */}
       {toast && (
         <div style={{
-          position: 'fixed', top: '80px', left: '50%',
-          transform: 'translateX(-50%)',
-          background: 'linear-gradient(90deg, #002776, #009c3b)',
-          color: 'white', padding: '12px 24px', borderRadius: '24px',
-          fontWeight: '700', fontSize: '15px', zIndex: 999,
-          boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
-          animation: 'fadeIn 0.3s ease'
+          position: 'fixed', top: '80px', left: '50%', transform: 'translateX(-50%)',
+          background: 'linear-gradient(90deg, #002776, #009c3b)', color: 'white',
+          padding: '12px 24px', borderRadius: '24px', fontWeight: '700', zIndex: 999,
+          boxShadow: '0 4px 20px rgba(0,0,0,0.2)'
         }}>
           {toast}
         </div>
       )}
 
+      {/* Header Estilo Orkut/Ei */}
       <div style={{
-        background: 'linear-gradient(90deg, #002776, #009c3b)',
-        padding: '12px 24px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        position: 'sticky',
-        top: 0,
-        zIndex: 100
+        background: 'linear-gradient(90deg, #002776, #009c3b)', padding: '12px 24px',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        position: 'sticky', top: 0, zIndex: 100
       }}>
-        <h1 style={{ color: 'white', fontSize: '32px', fontWeight: '900' }}>Ei</h1>
-        <span onClick={onComunidades} style={{ color: 'white', fontSize: '14px', fontWeight: '700', cursor: 'pointer' }}>
-          👥 Comunidades
-        </span>
-        <input placeholder="Buscar..." style={{
-          padding: '8px 16px', borderRadius: '20px',
-          border: 'none', width: '180px', fontSize: '14px'
-        }} />
-        <div onClick={onPerfil} style={{ color: 'white', fontSize: '24px', cursor: 'pointer' }}>👤</div>
+        <h1 style={{ color: 'white', fontSize: '32px', fontWeight: '900', margin: 0 }}>Ei</h1>
+        <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+            <span onClick={onComunidades} style={{ color: 'white', fontSize: '14px', fontWeight: '700', cursor: 'pointer' }}>👥 Comunidades</span>
+            <input placeholder="Buscar..." style={{ padding: '8px 16px', borderRadius: '20px', border: 'none', width: '150px' }} />
+            <div onClick={onPerfil} style={{ color: 'white', fontSize: '24px', cursor: 'pointer' }}>👤</div>
+        </div>
       </div>
 
       <div style={{ maxWidth: '600px', margin: '24px auto', padding: '0 16px' }}>
-
-        <div style={{
-          background: 'white', borderRadius: '16px',
-          padding: '16px', marginBottom: '16px',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
-        }}>
-          <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+        
+        {/* Caixa de Texto */}
+        <div style={{ background: 'white', borderRadius: '16px', padding: '16px', marginBottom: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+          <div style={{ display: 'flex', gap: '12px' }}>
             <span style={{ fontSize: '36px' }}>🧑</span>
             <textarea
-              placeholder="No que voce esta pensando?"
+              placeholder="No que você está pensando?"
               value={novoPost}
-              onChange={function(e) { setNovoPost(e.target.value) }}
-              onFocus={function() { setFocado(true) }}
-              onBlur={function() { setFocado(false) }}
+              onChange={(e) => setNovoPost(e.target.value)}
+              onFocus={() => setFocado(true)}
+              onBlur={() => setFocado(false)}
               style={{
-                flex: 1, padding: '12px 16px', borderRadius: '16px',
-                border: focado ? '2px solid #009c3b' : '2px solid #ddd',
-                fontSize: '15px', outline: 'none', background: 'white',
-                resize: 'none', height: '80px', fontFamily: 'sans-serif', color: '#333'
+                flex: 1, padding: '12px', borderRadius: '12px', border: focado ? '2px solid #009c3b' : '2px solid #ddd',
+                fontSize: '15px', outline: 'none', resize: 'none', height: '80px'
               }}
             />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
-            <span style={{ color: focado ? '#009c3b' : '#aaa', fontSize: '13px' }}>
-              {novoPost.length}/280 caracteres
-            </span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '12px' }}>
+            <span style={{ color: '#aaa', fontSize: '12px' }}>{novoPost.length}/280</span>
             <button onClick={publicar} style={{
-              padding: '10px 28px', borderRadius: '10px', border: 'none',
+              padding: '8px 24px', borderRadius: '8px', border: 'none',
               background: novoPost.trim() === '' ? '#ccc' : 'linear-gradient(90deg, #002776, #009c3b)',
-              color: 'white', fontWeight: 'bold', fontSize: '15px',
-              cursor: novoPost.trim() === '' ? 'not-allowed' : 'pointer'
+              color: 'white', fontWeight: 'bold', cursor: 'pointer'
             }}>Publicar</button>
           </div>
         </div>
 
-        {posts.map(function(post) {
-          const eiJaEnviado = eiEnviados.includes(post.id)
-          return (
-            <div key={post.id} style={{
-              background: 'white', borderRadius: '16px',
-              padding: '20px', marginBottom: '16px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                <span style={{ fontSize: '40px' }}>{post.avatar}</span>
-                <div>
-                  <p style={{ fontWeight: 'bold', fontSize: '15px' }}>{post.usuario}</p>
-                  <p style={{ color: '#888', fontSize: '13px' }}>agora mesmo</p>
-                </div>
-              </div>
-              <p style={{ fontSize: '16px', marginBottom: '16px', whiteSpace: 'pre-wrap' }}>{post.texto}</p>
-              <div style={{ display: 'flex', gap: '16px', borderTop: '1px solid #eee', paddingTop: '12px' }}>
-                <button onClick={function() { curtir(post.id) }} style={{
-                  border: 'none',
-                  background: post.curtido ? '#fff0f0' : 'none',
-                  cursor: 'pointer', fontSize: '14px', fontWeight: 'bold',
-                  color: post.curtido ? '#e00' : '#555',
-                  padding: '6px 12px', borderRadius: '20px', transition: 'all 0.2s'
-                }}>
-                  {post.curtido ? '❤️' : '🤍'} {post.curtidas}
-                </button>
-
-                <button style={{
-                  border: 'none', background: 'none', cursor: 'pointer',
-                  fontSize: '14px', color: '#555', fontWeight: 'bold',
-                  padding: '6px 12px', borderRadius: '20px'
-                }}>💬 Comentar</button>
-
-                <button
-                  onClick={function() { mandarEi(post.id, post.usuario) }}
-                  style={{
-                    border: 'none',
-                    background: eiJaEnviado ? '#fffbe6' : 'none',
-                    cursor: eiJaEnviado ? 'default' : 'pointer',
-                    fontSize: '14px',
-                    fontWeight: 'bold',
-                    color: eiJaEnviado ? '#ffaa00' : '#555',
-                    padding: '6px 12px',
-                    borderRadius: '20px',
-                    transition: 'all 0.2s',
-                    transform: eiJaEnviado ? 'scale(1.1)' : 'scale(1)'
-                  }}>
-                  {eiJaEnviado ? '👋 Ei enviado!' : '👋 Ei!'}
-                </button>
+        {/* Lista de Posts */}
+        {posts.map((post) => (
+          <div key={post.id} style={{ background: 'white', borderRadius: '16px', padding: '20px', marginBottom: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
+              <span style={{ fontSize: '40px' }}>{post.avatar || '👤'}</span>
+              <div>
+                <p style={{ fontWeight: 'bold', margin: 0 }}>{post.usuario}</p>
+                <p style={{ color: '#888', fontSize: '12px', margin: 0 }}>Enviado para o Ei</p>
               </div>
             </div>
-          )
-        })}
+            <p style={{ fontSize: '16px', whiteSpace: 'pre-wrap' }}>{post.texto}</p>
+            
+            <div style={{ display: 'flex', gap: '10px', borderTop: '1px solid #eee', paddingTop: '12px' }}>
+              <button onClick={() => curtir(post.id, false)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontWeight: 'bold', color: '#555' }}>
+                🤍 {post.curtidas || 0}
+              </button>
+              <button style={{ border: 'none', background: 'none', cursor: 'pointer', fontWeight: 'bold', color: '#555' }}>💬 Comentar</button>
+              <button onClick={() => mandarEi(post.id, post.usuario)} style={{ 
+                border: 'none', background: 'none', cursor: 'pointer', fontWeight: 'bold', 
+                color: eiEnviados.includes(post.id) ? '#ffaa00' : '#555' 
+              }}>
+                👋 {eiEnviados.includes(post.id) ? 'Ei enviado!' : 'Ei!'}
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )
