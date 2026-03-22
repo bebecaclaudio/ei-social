@@ -1,221 +1,205 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { auth } from './firebase-config'
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth'
 
-const inputStyle = (focado) => ({
+// Estilo base para manter o efeito de vidro (Glassmorphism)
+const inputBaseStyle = {
   width: '100%',
   padding: '14px 18px',
   borderRadius: '12px',
-  border: focado ? '2px solid #ffdf00' : '2px solid transparent',
   marginBottom: '12px',
   fontSize: '15px',
-  background: 'rgba(255,255,255,0.95)',
+  background: 'rgba(255, 255, 255, 0.08)', 
+  backdropFilter: 'blur(5px)',
   outline: 'none',
-  color: '#111',
+  color: '#ffffff', 
   boxSizing: 'border-box',
-  transition: 'border 0.2s'
-})
+  transition: 'all 0.2s ease-in-out',
+  WebkitAppearance: 'none', 
+}
+
+const getInputStyle = (focado, temErro = false) => ({
+  ...inputBaseStyle,
+  border: `2px solid ${temErro ? '#ff4444' : focado ? '#ffdf00' : 'rgba(255, 255, 255, 0.15)'}`,
+  background: focado ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.08)',
+});
 
 function Cadastro({ onVoltar }) {
   const [form, setForm] = useState({
     nome: '', email: '', senha: '', confirmarSenha: '',
     nascimento: '', telefone: '', cidade: '', sexo: ''
   })
+  const [captcha, setCaptcha] = useState({ num1: 0, num2: 0, respostaUser: '' })
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(false)
   const [focado, setFocado] = useState('')
   const [termos, setTermos] = useState(false)
+
+  // Gera o desafio matemático assim que o componente nasce
+  useEffect(() => {
+    gerarCaptcha();
+  }, [])
+
+  function gerarCaptcha() {
+    setCaptcha({
+      num1: Math.floor(Math.random() * 9) + 1,
+      num2: Math.floor(Math.random() * 9) + 1,
+      respostaUser: ''
+    })
+  }
 
   function handleChange(e) {
     setForm({ ...form, [e.target.name]: e.target.value })
   }
 
   function calcularIdade(nascimento) {
+    if (!nascimento) return 0;
     const nasc = new Date(nascimento)
     const hoje = new Date()
-    const idade = hoje.getFullYear() - nasc.getFullYear()
-    const aniversarioPassou = hoje.getMonth() > nasc.getMonth() ||
-      (hoje.getMonth() === nasc.getMonth() && hoje.getDate() >= nasc.getDate())
-    return aniversarioPassou ? idade : idade - 1
+    let idade = hoje.getFullYear() - nasc.getFullYear()
+    const m = hoje.getMonth() - nasc.getMonth()
+    if (m < 0 || (m === 0 && hoje.getDate() < nasc.getDate())) idade--
+    return idade
   }
 
   async function cadastrar() {
+    setErro('')
+    
+    // 1. Validação do Captcha
+    if (parseInt(captcha.respostaUser) !== (captcha.num1 + captcha.num2)) {
+      setErro('Resultado do desafio matemático incorreto!')
+      gerarCaptcha();
+      return
+    }
+
+    // 2. Validação de campos obrigatórios
     if (!form.nome || !form.email || !form.senha || !form.confirmarSenha || !form.nascimento || !form.cidade || !form.sexo) {
-      setErro('Preencha todos os campos obrigatorios!')
+      setErro('Preencha todos os campos obrigatórios!')
       return
     }
-    if (form.senha.length < 6) {
-      setErro('A senha precisa ter pelo menos 6 caracteres!')
-      return
-    }
+
+    // 3. Regras de negócio
     if (form.senha !== form.confirmarSenha) {
-      setErro('As senhas nao coincidem!')
+      setErro('As senhas não coincidem!')
       return
     }
     if (calcularIdade(form.nascimento) < 16) {
-      setErro('Voce precisa ter pelo menos 16 anos para se cadastrar!')
+      setErro('Você precisa ter pelo menos 16 anos!')
       return
     }
     if (!termos) {
-      setErro('Voce precisa aceitar os termos de uso!')
+      setErro('Você precisa aceitar os termos de uso!')
       return
     }
+
     setCarregando(true)
     try {
       const resultado = await createUserWithEmailAndPassword(auth, form.email, form.senha)
       await updateProfile(resultado.user, { displayName: form.nome })
     } catch (e) {
-      if (e.code === 'auth/email-already-in-use') {
-        setErro('Este email ja esta cadastrado!')
-      } else {
-        setErro('Erro ao cadastrar. Tenta de novo!')
-      }
+      setErro(e.code === 'auth/email-already-in-use' ? 'Email já cadastrado!' : 'Erro ao cadastrar.');
       setCarregando(false)
+      gerarCaptcha();
     }
   }
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'linear-gradient(160deg, #002776 0%, #009c3b 50%, #ffdf00 100%)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: '24px 0'
-    }}>
+    <>
+      <style>{`
+        input:-webkit-autofill {
+          -webkit-text-fill-color: #ffffff !important;
+          -webkit-box-shadow: 0 0 0px 1000px rgba(10, 30, 10, 0.9) inset !important;
+        }
+        input::placeholder { color: rgba(255, 255, 255, 0.5) !important; }
+        select option { background: #1a1a1a; color: white; }
+      `}</style>
+
       <div style={{
-        background: 'rgba(0,0,0,0.35)',
-        backdropFilter: 'blur(20px)',
-        borderRadius: '24px', padding: '40px 40px', width: '100%',
-        maxWidth: '420px', textAlign: 'center',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-        border: '1px solid rgba(255,255,255,0.15)'
+        minHeight: '100vh',
+        background: 'linear-gradient(160deg, #004d1a 0%, #002776 100%)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 20px'
       }}>
-        <img src="/logo.png" alt="Ei" style={{ width: '100px', marginBottom: '12px' }} />
-        <p style={{ color: 'white', fontSize: '16px', margin: '0 0 20px' }}>
-          Crie sua conta
-        </p>
-
-        {erro && (
-          <p style={{ color: '#ffdf00', fontSize: '14px', marginBottom: '12px', fontWeight: '700' }}>
-            ⚠️ {erro}
-          </p>
-        )}
-
-        <input name="nome" type="text" placeholder="Seu nome completo"
-          value={form.nome} onChange={handleChange}
-          onFocus={function() { setFocado('nome') }}
-          onBlur={function() { setFocado('') }}
-          style={inputStyle(focado === 'nome')}
-        />
-
-        <input name="email" type="email" placeholder="seu@email.com"
-          value={form.email} onChange={handleChange}
-          onFocus={function() { setFocado('email') }}
-          onBlur={function() { setFocado('') }}
-          style={inputStyle(focado === 'email')}
-        />
-
-        <input name="senha" type="password" placeholder="Crie uma senha (min. 6 caracteres)"
-          value={form.senha} onChange={handleChange}
-          onFocus={function() { setFocado('senha') }}
-          onBlur={function() { setFocado('') }}
-          style={inputStyle(focado === 'senha')}
-        />
-
-        <input name="confirmarSenha" type="password" placeholder="Confirme sua senha"
-          value={form.confirmarSenha} onChange={handleChange}
-          onFocus={function() { setFocado('confirmarSenha') }}
-          onBlur={function() { setFocado('') }}
-          style={{
-            ...inputStyle(focado === 'confirmarSenha'),
-            border: form.confirmarSenha && form.senha !== form.confirmarSenha
-              ? '2px solid #ff4444'
-              : form.confirmarSenha && form.senha === form.confirmarSenha
-              ? '2px solid #00cc44'
-              : focado === 'confirmarSenha' ? '2px solid #ffdf00' : '2px solid transparent'
-          }}
-        />
-
-        <input name="telefone" type="tel" placeholder="Telefone (opcional)"
-          value={form.telefone} onChange={handleChange}
-          onFocus={function() { setFocado('telefone') }}
-          onBlur={function() { setFocado('') }}
-          style={inputStyle(focado === 'telefone')}
-        />
-
-        <input name="cidade" type="text" placeholder="Sua cidade"
-          value={form.cidade} onChange={handleChange}
-          onFocus={function() { setFocado('cidade') }}
-          onBlur={function() { setFocado('') }}
-          style={inputStyle(focado === 'cidade')}
-        />
-
-        <select name="sexo" value={form.sexo} onChange={handleChange}
-          onFocus={function() { setFocado('sexo') }}
-          onBlur={function() { setFocado('') }}
-          style={{
-            ...inputStyle(focado === 'sexo'),
-            color: form.sexo === '' ? '#888' : '#111'
-          }}
-        >
-          <option value="" disabled>Sexo</option>
-          <option value="masculino">Masculino</option>
-          <option value="feminino">Feminino</option>
-          <option value="outro">Outro</option>
-          <option value="prefiro_nao_dizer">Prefiro não dizer</option>
-        </select>
-
-        <div style={{ marginBottom: '12px', textAlign: 'left' }}>
-          <label style={{ color: 'rgba(255,255,255,0.7)', fontSize: '13px', marginBottom: '6px', display: 'block' }}>
-            Data de nascimento *
-          </label>
-          <input name="nascimento" type="date"
-            value={form.nascimento} onChange={handleChange}
-            onFocus={function() { setFocado('nascimento') }}
-            onBlur={function() { setFocado('') }}
-            style={{ ...inputStyle(focado === 'nascimento'), marginBottom: '0' }}
-          />
-        </div>
-
         <div style={{
-          display: 'flex', alignItems: 'flex-start', gap: '10px',
-          margin: '16px 0', textAlign: 'left'
+          background: 'rgba(0,0,0,0.30)', backdropFilter: 'blur(25px)',
+          borderRadius: '24px', padding: '40px', width: '100%', maxWidth: '450px',
+          textAlign: 'center', boxShadow: '0 10px 40px rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.12)'
         }}>
-          <input
-            type="checkbox"
-            checked={termos}
-            onChange={function(e) { setTermos(e.target.checked) }}
-            style={{ marginTop: '3px', cursor: 'pointer', width: '16px', height: '16px' }}
-          />
-          <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '13px', margin: 0 }}>
-            Concordo com os{' '}
-            <span style={{ color: '#ffdf00', cursor: 'pointer', fontWeight: '700' }}>
-              Termos de Uso
-            </span>
-            {' '}e a{' '}
-            <span style={{ color: '#ffdf00', cursor: 'pointer', fontWeight: '700' }}>
-              Politica de Privacidade
-            </span>
+          <img src="/logo.png" alt="Ei" style={{ height: '60px', marginBottom: '20px' }} />
+          <p style={{ color: 'white', fontSize: '18px', fontWeight: '600', marginBottom: '20px' }}>Crie sua conta</p>
+          
+          {erro && <p style={{ color: '#ffdf00', background: 'rgba(255,223,0,0.15)', padding: '10px', borderRadius: '8px', fontSize: '14px', marginBottom: '15px', border: '1px solid #ffdf00' }}>⚠️ {erro}</p>}
+
+          <input name="nome" type="text" placeholder={focado === 'nome' ? "" : "Nome completo"} 
+            value={form.nome} onChange={handleChange} onFocus={() => setFocado('nome')} onBlur={() => setFocado('')}
+            style={getInputStyle(focado === 'nome')} />
+
+          <input name="email" type="email" placeholder={focado === 'email' ? "" : "seu@email.com"} 
+            value={form.email} onChange={handleChange} onFocus={() => setFocado('email')} onBlur={() => setFocado('')}
+            style={getInputStyle(focado === 'email')} />
+
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <input name="senha" type="password" placeholder={focado === 'senha' ? "" : "Senha"} 
+              value={form.senha} onChange={handleChange} onFocus={() => setFocado('senha')} onBlur={() => setFocado('')}
+              style={getInputStyle(focado === 'senha')} />
+
+            <input name="confirmarSenha" type="password" placeholder={focado === 'confirmar' ? "" : "Confirme"} 
+              value={form.confirmarSenha} onChange={handleChange} onFocus={() => setFocado('confirmar')} onBlur={() => setFocado('')}
+              style={getInputStyle(focado === 'confirmar', form.confirmarSenha && form.senha !== form.confirmarSenha)} />
+          </div>
+
+          <input name="telefone" type="tel" placeholder={focado === 'telefone' ? "" : "Telefone (opcional)"} 
+            value={form.telefone} onChange={handleChange} onFocus={() => setFocado('telefone')} onBlur={() => setFocado('')}
+            style={getInputStyle(focado === 'telefone')} />
+
+          <input name="cidade" type="text" placeholder={focado === 'cidade' ? "" : "Sua cidade"} 
+            value={form.cidade} onChange={handleChange} onFocus={() => setFocado('cidade')} onBlur={() => setFocado('')}
+            style={getInputStyle(focado === 'cidade')} />
+
+          <select name="sexo" value={form.sexo} onChange={handleChange} onFocus={() => setFocado('sexo')} onBlur={() => setFocado('')}
+            style={{ ...getInputStyle(focado === 'sexo'), color: form.sexo === '' ? 'rgba(255,255,255,0.5)' : 'white' }}>
+            <option value="" disabled>Selecione o Sexo</option>
+            <option value="masculino">Masculino</option>
+            <option value="feminino">Feminino</option>
+            <option value="outro">Outro</option>
+            <option value="não_dizer">Prefiro não dizer</option>
+          </select>
+
+          <div style={{ marginBottom: '15px', textAlign: 'left' }}>
+            <label style={{ color: 'rgba(255,255,255,0.7)', fontSize: '13px', display: 'block', marginBottom: '5px' }}>Data de Nascimento *</label>
+            <input name="nascimento" type="date" value={form.nascimento} onChange={handleChange}
+              onFocus={() => setFocado('nasc')} onBlur={() => setFocado('')} style={getInputStyle(focado === 'nasc')} />
+          </div>
+
+          {/* CAPTCHA MATEMÁTICO REFINADO */}
+          <div style={{ background: 'rgba(255,223,0,0.05)', padding: '15px', borderRadius: '12px', marginBottom: '15px', border: '1px dashed rgba(255,223,0,0.3)' }}>
+            <p style={{ color: '#ffdf00', fontSize: '14px', marginBottom: '10px', fontWeight: 'bold' }}>
+              Segurança: Quanto é {captcha.num1} + {captcha.num2}?
+            </p>
+            <input type="number" placeholder={focado === 'captcha' ? "" : "Resposta"}
+              value={captcha.respostaUser} onChange={(e) => setCaptcha({...captcha, respostaUser: e.target.value})}
+              onFocus={() => setFocado('captcha')} onBlur={() => setFocado('')}
+              style={{ ...getInputStyle(focado === 'captcha'), marginBottom: 0 }} />
+          </div>
+
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', marginBottom: '20px', textAlign: 'left' }}>
+            <input type="checkbox" checked={termos} onChange={(e) => setTermos(e.target.checked)} style={{ width: '18px', height: '18px', accentColor: '#ffdf00', cursor: 'pointer' }} />
+            <p style={{ color: 'white', fontSize: '12px', margin: 0 }}>Li e aceito os Termos de Uso e Política de Privacidade.</p>
+          </div>
+
+          <button onClick={cadastrar} disabled={carregando} style={{
+            width: '100%', padding: '16px', borderRadius: '12px', border: 'none',
+            background: '#ffdf00', color: '#002776', fontWeight: '800', fontSize: '16px', cursor: 'pointer',
+            boxShadow: '0 4px 15px rgba(255,223,0,0.3)'
+          }}>
+            {carregando ? 'CRIANDO CONTA...' : 'CRIAR MINHA CONTA'}
+          </button>
+
+          <p style={{ color: 'rgba(255,255,255,0.6)', marginTop: '20px', fontSize: '14px' }}>
+            Já tem conta? <span onClick={onVoltar} style={{ color: '#ffdf00', fontWeight: 'bold', cursor: 'pointer' }}>Entrar</span>
           </p>
         </div>
-
-        <button onClick={cadastrar} disabled={carregando} style={{
-          width: '100%', padding: '14px', borderRadius: '12px', border: 'none',
-          background: carregando ? '#ccc' : '#ffdf00', color: '#002776',
-          fontWeight: '800', fontSize: '16px',
-          cursor: carregando ? 'not-allowed' : 'pointer',
-          marginBottom: '16px'
-        }}>
-          {carregando ? 'Criando conta...' : 'Criar minha conta'}
-        </button>
-
-        <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '14px' }}>
-          Ja tem conta?{' '}
-          <span onClick={onVoltar} style={{ color: '#ffdf00', fontWeight: 'bold', cursor: 'pointer' }}>
-            Entrar
-          </span>
-        </p>
       </div>
-    </div>
+    </>
   )
 }
 
