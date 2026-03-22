@@ -58,7 +58,7 @@ function Comunidades({ onVoltar, onPerfil }) {  const [comunidades, setComunidad
         justifyContent: 'space-between',
         position: 'sticky', top: 0, zIndex: 100
       }}>
-        <h1 onClick={onVoltar} style={{ color: 'white', fontSize: '28px', fontWeight: '900', cursor: 'pointer' }}>Ei</h1>
+        <img onClick={onVoltar} src="/logo.png" alt="Ei" style={{ height: '36px', cursor: 'pointer' }} />
         <span style={{ color: 'white', fontWeight: '700', fontSize: '16px' }}>Comunidades</span>
         <div onClick={onPerfil} style={{ color: 'white', fontSize: '22px', cursor: 'pointer' }}>👤</div>
       </div>

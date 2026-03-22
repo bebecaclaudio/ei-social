@@ -20,7 +20,7 @@ function Login({ onCadastro, onEntrar }) {
         boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
         border: '1px solid rgba(255,255,255,0.2)'
       }}>
-        <h1 style={{ fontSize: '90px', color: 'white', fontWeight: '900', lineHeight: 1 }}>Ei</h1>
+        <img src="/logo.png" alt="Ei" style={{ width: '150px', marginBottom: '8px' }} />
         <p style={{ color: 'white', fontSize: '16px', margin: '8px 0 32px' }}>
           a rede social brasileira de verdade
         </p>
