@@ -4,7 +4,7 @@ import Feed from './Feed'
 import Cadastro from './Cadastro'
 import Perfil from './Perfil'
 import Comunidades from './Comunidades'
-import NavBar from './NavBar'
+import Layout from './Layout'
 
 function Login({ onCadastro, onEntrar }) {
   return (
@@ -20,19 +20,19 @@ function Login({ onCadastro, onEntrar }) {
         boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
         border: '1px solid rgba(255,255,255,0.2)'
       }}>
-        <img src="/logo.png" alt="Ei" style={{ width: '150px', marginBottom: '8px' }} />
-        <p style={{ color: 'white', fontSize: '16px', margin: '8px 0 32px' }}>
+        <img src="/logo.png" alt="Ei" style={{ width: '150px', marginBottom: '16px' }} />
+        <p style={{ color: 'white', fontSize: '16px', margin: '0 0 32px' }}>
           a rede social brasileira de verdade
         </p>
         <input type="email" placeholder="seu@email.com" style={{
           width: '100%', padding: '14px 18px', borderRadius: '12px',
           border: 'none', marginBottom: '12px', fontSize: '15px',
-          background: 'white', outline: 'none'
+          background: 'white', outline: 'none', boxSizing: 'border-box'
         }} />
         <input type="password" placeholder="senha" style={{
           width: '100%', padding: '14px 18px', borderRadius: '12px',
           border: 'none', marginBottom: '20px', fontSize: '15px',
-          background: 'white', outline: 'none'
+          background: 'white', outline: 'none', boxSizing: 'border-box'
         }} />
         <button onClick={onEntrar} style={{
           width: '100%', padding: '14px', borderRadius: '12px', border: 'none',
@@ -61,22 +61,23 @@ function App() {
   const logado = tela !== 'login' && tela !== 'cadastro'
 
   return (
-    <div style={{ paddingBottom: logado ? '70px' : '0' }}>
-      {tela === 'cadastro' && <Cadastro onVoltar={() => setTela('login')} />}
-      {tela === 'feed' && <Feed onPerfil={() => setTela('perfil')} onComunidades={() => setTela('comunidades')} />}
-      {tela === 'perfil' && <Perfil onVoltar={() => setTela('feed')} />}
-      {tela === 'comunidades' && <Comunidades onVoltar={() => setTela('feed')} onPerfil={() => setTela('perfil')} />}
-      {tela === 'login' && <Login onCadastro={() => setTela('cadastro')} onEntrar={() => setTela('feed')} />}
-
+    <div>
       {logado && (
-        <NavBar
-          telaAtual={tela}
+        <Layout
+          tela={tela}
           onFeed={() => setTela('feed')}
           onComunidades={() => setTela('comunidades')}
           onPerfil={() => setTela('perfil')}
-          onNotificacoes={() => setTela('feed')}
         />
       )}
+
+      <div>
+        {tela === 'login' && <Login onCadastro={() => setTela('cadastro')} onEntrar={() => setTela('feed')} />}
+        {tela === 'cadastro' && <Cadastro onVoltar={() => setTela('login')} />}
+        {tela === 'feed' && <Feed />}
+        {tela === 'perfil' && <Perfil />}
+        {tela === 'comunidades' && <Comunidades />}
+      </div>
     </div>
   )
 }
