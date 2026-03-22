@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-function Perfil({ onVoltar }) {
+function Perfil() {
   const [abaSelecionada, setAbaSelecionada] = useState('posts')
 
   const posts = [
@@ -15,24 +15,6 @@ function Perfil({ onVoltar }) {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
-
-      <div style={{
-        background: 'linear-gradient(90deg, #002776, #009c3b)',
-        padding: '12px 24px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        position: 'sticky',
-        top: 0,
-        zIndex: 100
-      }}>
-        <h1 onClick={onVoltar} style={{ color: 'white', fontSize: '28px', fontWeight: '900', cursor: 'pointer' }}>Ei</h1>
-        <input placeholder="Buscar..." style={{
-          padding: '8px 16px', borderRadius: '20px',
-          border: 'none', width: '200px', fontSize: '14px'
-        }} />
-        <div style={{ color: 'white', fontSize: '22px', cursor: 'pointer' }}>👤</div>
-      </div>
 
       <div style={{
         height: '200px',
@@ -136,7 +118,7 @@ function Perfil({ onVoltar }) {
               <textarea placeholder="Deixe um depoimento..." style={{
                 width: '100%', padding: '12px', borderRadius: '10px',
                 border: '1px solid #ddd', fontSize: '14px',
-                resize: 'none', height: '80px', outline: 'none'
+                resize: 'none', height: '80px', outline: 'none', boxSizing: 'border-box'
               }} />
               <button style={{
                 marginTop: '8px', padding: '10px 24px', borderRadius: '10px',

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
-function Comunidades({ onVoltar, onPerfil }) {  const [comunidades, setComunidades] = useState([
+function Comunidades() {
+  const [comunidades, setComunidades] = useState([
     { id: 1, nome: 'Saudades do Orkut', membros: 4821, categoria: 'Nostalgia', emoji: '💾' },
     { id: 2, nome: 'Pagode e Samba', membros: 3200, categoria: 'Musica', emoji: '🎵' },
     { id: 3, nome: 'Receitas Brasileiras', membros: 2900, categoria: 'Gastronomia', emoji: '🍖' },
@@ -49,23 +50,8 @@ function Comunidades({ onVoltar, onPerfil }) {  const [comunidades, setComunidad
 
   return (
     <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
-
-      {/* Navbar */}
-      <div style={{
-        background: 'linear-gradient(90deg, #002776, #009c3b)',
-        padding: '12px 24px',
-        display: 'flex', alignItems: 'center',
-        justifyContent: 'space-between',
-        position: 'sticky', top: 0, zIndex: 100
-      }}>
-        <img onClick={onVoltar} src="/logo.png" alt="Ei" style={{ height: '36px', cursor: 'pointer' }} />
-        <span style={{ color: 'white', fontWeight: '700', fontSize: '16px' }}>Comunidades</span>
-        <div onClick={onPerfil} style={{ color: 'white', fontSize: '22px', cursor: 'pointer' }}>👤</div>
-      </div>
-
       <div style={{ maxWidth: '700px', margin: '24px auto', padding: '0 16px' }}>
 
-        {/* Busca e criar */}
         <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
           <input
             placeholder="Buscar comunidade..."
@@ -73,20 +59,16 @@ function Comunidades({ onVoltar, onPerfil }) {  const [comunidades, setComunidad
             onChange={function(e) { setBusca(e.target.value) }}
             style={{
               flex: 1, padding: '12px 18px', borderRadius: '12px',
-              border: '2px solid #ddd', fontSize: '15px', outline: 'none',
-              color: '#333'
+              border: '2px solid #ddd', fontSize: '15px', outline: 'none', color: '#333'
             }}
           />
-          <button
-            onClick={function() { setCriando(true) }}
-            style={{
-              padding: '12px 20px', borderRadius: '12px', border: 'none',
-              background: 'linear-gradient(90deg, #002776, #009c3b)',
-              color: 'white', fontWeight: '800', fontSize: '15px', cursor: 'pointer'
-            }}>+ Criar</button>
+          <button onClick={function() { setCriando(true) }} style={{
+            padding: '12px 20px', borderRadius: '12px', border: 'none',
+            background: 'linear-gradient(90deg, #002776, #009c3b)',
+            color: 'white', fontWeight: '800', fontSize: '15px', cursor: 'pointer'
+          }}>+ Criar</button>
         </div>
 
-        {/* Modal criar comunidade */}
         {criando && (
           <div style={{
             background: 'white', borderRadius: '16px', padding: '24px',
@@ -139,7 +121,6 @@ function Comunidades({ onVoltar, onPerfil }) {  const [comunidades, setComunidad
           </div>
         )}
 
-        {/* Minhas comunidades */}
         <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#002776', marginBottom: '12px' }}>
           Minhas Comunidades
         </h2>
@@ -148,8 +129,7 @@ function Comunidades({ onVoltar, onPerfil }) {  const [comunidades, setComunidad
             return (
               <div key={c.id} style={{
                 background: 'white', borderRadius: '16px', padding: '16px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                border: '2px solid #009c3b'
+                boxShadow: '0 2px 8px rgba(0,0,0,0.08)', border: '2px solid #009c3b'
               }}>
                 <div style={{ fontSize: '40px', marginBottom: '8px' }}>{c.emoji}</div>
                 <p style={{ fontWeight: '800', fontSize: '15px', color: '#222' }}>{c.nome}</p>
@@ -166,7 +146,6 @@ function Comunidades({ onVoltar, onPerfil }) {  const [comunidades, setComunidad
           })}
         </div>
 
-        {/* Todas as comunidades */}
         <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#002776', marginBottom: '12px' }}>
           Descobrir Comunidades
         </h2>

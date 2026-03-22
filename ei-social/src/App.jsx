@@ -71,13 +71,11 @@ function App() {
         />
       )}
 
-      <div>
-        {tela === 'login' && <Login onCadastro={() => setTela('cadastro')} onEntrar={() => setTela('feed')} />}
-        {tela === 'cadastro' && <Cadastro onVoltar={() => setTela('login')} />}
-        {tela === 'feed' && <Feed />}
-        {tela === 'perfil' && <Perfil />}
-        {tela === 'comunidades' && <Comunidades />}
-      </div>
+      {tela === 'login' && <Login onCadastro={() => setTela('cadastro')} onEntrar={() => setTela('feed')} />}
+      {tela === 'cadastro' && <Cadastro onVoltar={() => setTela('login')} />}
+      {tela === 'feed' && <Feed />}
+      {tela === 'perfil' && <Perfil />}
+      {tela === 'comunidades' && <Comunidades />}
     </div>
   )
 }
