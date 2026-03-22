@@ -1,16 +1,16 @@
 import { useNavigate, useLocation } from 'react-router-dom';
 
-// 1. Mudamos os nomes nos parênteses para o que o App.jsx envia
 function Layout({ children, usuario, onSair }) {
   const navigate = useNavigate();
-  const location = useLocation(); // Para saber em qual página estamos
+  const location = useLocation();
 
   // Função para saber se o botão deve brilhar (está ativo)
   const isAtivo = (path) => location.pathname === path;
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
-      {/* --- SEU DESIGN ORIGINAL DA BARRA --- */}
+      
+      {/* --- BARRA DE NAVEGAÇÃO --- */}
       <div style={{
         background: 'linear-gradient(90deg, #002776, #009c3b)',
         padding: '10px 24px',
@@ -20,15 +20,29 @@ function Layout({ children, usuario, onSair }) {
         position: 'sticky',
         top: 0,
         zIndex: 100,
-        boxShadow: '0 2px 12px rgba(0,0,0,0.2)'
+        boxShadow: '0 2px 12px rgba(0,0,0,0.2)',
+        height: '60px', // Altura fixa da barra para evitar pulos no conteúdo
+        boxSizing: 'border-box'
       }}>
-        <img
-          onClick={() => navigate('/feed')} // Mudou aqui!
-          src="/logo.png"
-          alt="Ei"
-          style={{ height: '40px', cursor: 'pointer' }}
-        />
+        
+        {/* LOGO: Com dimensões travadas para evitar o "pisca-pisca" */}
+        <div style={{ display: 'flex', alignItems: 'center', minWidth: '40px' }}>
+          <img
+            onClick={() => navigate('/feed')}
+            src="/logo.png"
+            alt="Ei"
+            style={{ 
+              height: '40px', 
+              width: '40px', // Travamos a largura também
+              minWidth: '40px', // Reforço para o navegador
+              cursor: 'pointer',
+              objectFit: 'contain',
+              display: 'block' // Remove espaços fantasmas abaixo da imagem
+            }}
+          />
+        </div>
 
+        {/* BOTÕES CENTRAIS */}
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <button onClick={() => navigate('/feed')} style={{
             background: isAtivo('/feed') ? 'rgba(255,255,255,0.2)' : 'transparent',
@@ -45,19 +59,34 @@ function Layout({ children, usuario, onSair }) {
           }}>👥 Comunidades</button>
         </div>
 
+        {/* BUSCA E PERFIL */}
         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          <input placeholder="Buscar..." style={{
-            padding: '8px 16px', borderRadius: '20px',
-            border: 'none', width: '180px', fontSize: '14px', outline: 'none'
-          }} />
+          <input 
+            placeholder="Buscar..." 
+            style={{
+              padding: '8px 16px', borderRadius: '20px',
+              border: 'none', width: '180px', fontSize: '14px', outline: 'none'
+            }} 
+          />
+          
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-            <div onClick={() => navigate('/perfil')} style={{
+            {/* Ícone de Perfil */}
+            <div 
+              onClick={() => navigate('/perfil')} 
+              style={{
                 height: '36px', width: '36px', borderRadius: '50%',
                 cursor: 'pointer', border: '2px solid white',
                 background: 'white', display: 'flex',
                 alignItems: 'center', justifyContent: 'center',
-                fontSize: '20px'
-            }}>👤</div>
+                fontSize: '20px',
+                overflow: 'hidden'
+              }}
+            >
+              {usuario?.photoURL ? (
+                <img src={usuario.photoURL} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+              ) : "👤"}
+            </div>
+
             <button onClick={onSair} style={{
                 background: 'rgba(255,255,255,0.2)', border: 'none',
                 color: 'white', fontWeight: '700', fontSize: '13px',
@@ -67,9 +96,13 @@ function Layout({ children, usuario, onSair }) {
         </div>
       </div>
 
-      {/* --- A MÁGICA ACONTECE AQUI --- */}
-      <main style={{ flex: 1, background: '#f0f2f5', color: '#333' }}>
-        {/* Este 'children' é o que faz o Feed aparecer abaixo da barra! */}
+      {/* --- CONTEÚDO PRINCIPAL --- */}
+      <main style={{ 
+        flex: 1, 
+        background: '#f0f2f5', 
+        color: '#333',
+        paddingTop: '20px' // Espaçamento para o conteúdo não grudar na barra
+      }}>
         {children} 
       </main>
     </div>
