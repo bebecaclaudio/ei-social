@@ -1,71 +1,71 @@
 import { useState, useEffect } from 'react'
-import './App.css'
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { auth } from './firebase-config'
-import { signOut, onAuthStateChanged } from 'firebase/auth'
+import { onAuthStateChanged, signOut } from 'firebase/auth'
 
-// Importação dos seus componentes (Arquivos separados)
+// Seus Componentes
 import Login from './Login'
-import Feed from './Feed'
 import Cadastro from './Cadastro'
+import Feed from './Feed'
 import Perfil from './Perfil'
 import Comunidades from './Comunidades'
 import Layout from './Layout'
 
+// Componente "Segurança" (O AuthRoute)
+function RotaPrivada({ children, usuario, carregando }) {
+  if (carregando) return null // Espera o Firebase responder
+  return usuario ? children : <Navigate to="/" />
+}
+
 function App() {
-  const [tela, setTela] = useState('login')
   const [usuario, setUsuario] = useState(null)
   const [carregando, setCarregando] = useState(true)
 
-  // Observador de Login (O Coração do App)
-  useEffect(function() {
-    const unsub = onAuthStateChanged(auth, function(user) {
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
       setUsuario(user)
       setCarregando(false)
-      // Se logar, vai pro Feed. Se deslogar, vai pro Login.
-      if (user) setTela('feed')
-      else setTela('login')
     })
     return unsub
   }, [])
 
   async function sair() {
     await signOut(auth)
-    setTela('login')
   }
 
-  // Tela de Carregamento com o Pulse que você criou
   if (carregando) return (
-    <div className="loading-container">
-      <img src="/logo.png" alt="Ei" className="pulse-animation" />
+    <div className="loading-screen">
+      <img src="/logo.png" alt="Ei" style={{ width: '150px', animation: 'pulse 1s infinite' }} />
     </div>
   )
 
-  const logado = usuario !== null && tela !== 'cadastro'
-
   return (
-    <div>
-      {/* O Layout (Menu/Barra) só aparece se estiver logado */}
-      {logado && (
-        <Layout
-          tela={tela}
-          onFeed={() => setTela('feed')}
-          onComunidades={() => setTela('comunidades')}
-          onPerfil={() => setTela('perfil')}
-          onSair={sair}
-          usuario={usuario}
-        />
-      )}
+    <Router>
+      <Routes>
+        {/* ROTAS PÚBLICAS */}
+        <Route path="/" element={!usuario ? <Login /> : <Navigate to="/feed" />} />
+        <Route path="/Cadastro" element={<Cadastro />} />
 
-      {/* Lógica de Troca de Telas */}
-      {tela === 'login' && <Login onCadastro={() => setTela('cadastro')} />}
-      
-      {tela === 'cadastro' && <Cadastro onVoltar={() => setTela('login')} />}
+        {/* ROTAS PROTEGIDAS (Só entra quem está logado) */}
+        <Route path="/Feed" element={
+          <RotaPrivada usuario={usuario} carregando={carregando}>
+            <Layout usuario={usuario} onSair={sair}><Feed usuario={usuario} /></Layout>
+          </RotaPrivada>
+        } />
 
-      {/* Telas Internas */}
-      {tela === 'feed' && logado && <Feed usuario={usuario} />}
-      {tela === 'perfil' && logado && <Perfil usuario={usuario} onSair={sair} />}
-      {tela === 'comunidades' && logado && <Comunidades />}
-    </div>
+        <Route path="/Perfil" element={
+          <RotaPrivada usuario={usuario} carregando={carregando}>
+            <Layout usuario={usuario} onSair={sair}><Perfil usuario={usuario} onSair={sair} /></Layout>
+          </RotaPrivada>
+        } />
+
+        <Route path="/Comunidades" element={
+          <RotaPrivada usuario={usuario} carregando={carregando}>
+            <Layout usuario={usuario} onSair={sair}><Comunidades /></Layout>
+          </RotaPrivada>
+        } />
+      </Routes>
+    </Router>
   )
 }
 
