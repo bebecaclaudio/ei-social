@@ -3,20 +3,21 @@ import { getAnalytics } from "firebase/analytics";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
+// Aqui está a "mágica": o código lê o seu arquivo .env de forma segura
 const firebaseConfig = {
-  apiKey: "AIzaSyDM-lK7SVxnQ8j2_QacTPLauE50RaTKPRM",
-  authDomain: "ei-social.firebaseapp.com",
-  projectId: "ei-social",
-  storageBucket: "ei-social.firebasestorage.app",
-  messagingSenderId: "1005094792930",
-  appId: "1:1005094792930:web:9519944aabba7fc8c778bb",
-  measurementId: "G-8QSJC6HDTQ"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 // Inicializa o Firebase
 const app = initializeApp(firebaseConfig);
 
-// Exporta as instâncias para usar nos outros arquivos (.jsx)
+// Exporta as instâncias para usar nos outros arquivos (Cadastro, Feed, etc)
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 export const analytics = getAnalytics(app);
