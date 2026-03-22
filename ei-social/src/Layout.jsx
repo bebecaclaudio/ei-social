@@ -39,13 +39,20 @@ function Layout({ tela, onFeed, onComunidades, onPerfil }) {
           padding: '8px 16px', borderRadius: '20px',
           border: 'none', width: '180px', fontSize: '14px', outline: 'none'
         }} />
-        <div onClick={onPerfil} style={{
-          height: '36px', width: '36px', borderRadius: '50%',
-          cursor: 'pointer', border: '2px solid white',
-          background: 'white', display: 'flex',
-          alignItems: 'center', justifyContent: 'center',
-          fontSize: '20px'
-        }}>👤</div>
+       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <div onClick={onPerfil} style={{
+                height: '36px', width: '36px', borderRadius: '50%',
+                cursor: 'pointer', border: '2px solid white',
+                background: 'white', display: 'flex',
+                alignItems: 'center', justifyContent: 'center',
+                fontSize: '20px'
+            }}>👤</div>
+            <button onClick={onSair} style={{
+                background: 'rgba(255,255,255,0.2)', border: 'none',
+                color: 'white', fontWeight: '700', fontSize: '13px',
+                cursor: 'pointer', padding: '6px 14px', borderRadius: '20px'
+            }}>Sair</button>
+            </div>
       </div>
     </div>
   )
