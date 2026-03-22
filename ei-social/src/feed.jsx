@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { db } from './firebase-config' 
+// Mudamos as importações para o padrão do projeto React
 import { 
   collection, 
   addDoc, 
@@ -10,7 +11,7 @@ import {
   doc,
   updateDoc,
   increment 
-} from "https://www.gstatic.com/firebasejs/12.11.0/firebase-firestore.js";
+} from "firebase/firestore"; 
 
 function Feed({ onPerfil, onComunidades }) {
   const [posts, setPosts] = useState([])
@@ -21,7 +22,9 @@ function Feed({ onPerfil, onComunidades }) {
 
   // 1. ESCUTAR O BANCO DE DADOS (Tempo Real)
   useEffect(() => {
-    const q = query(collection(db, "posts"), orderBy("data", "desc"));
+    // Referência para a coleção 'posts'
+    const postsCollection = collection(db, "posts");
+    const q = query(postsCollection, orderBy("data", "desc"));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const postsFirebase = snapshot.docs.map(doc => ({
@@ -29,9 +32,11 @@ function Feed({ onPerfil, onComunidades }) {
         ...doc.data()
       }));
       setPosts(postsFirebase);
+    }, (error) => {
+      console.error("Erro no Snapshot:", error);
     });
 
-    return () => unsubscribe(); // Limpa a conexão ao fechar a página
+    return () => unsubscribe(); 
   }, []);
 
   // 2. PUBLICAR NO FIREBASE
@@ -44,20 +49,25 @@ function Feed({ onPerfil, onComunidades }) {
         texto: novoPost,
         curtidas: 0,
         avatar: '🧑',
-        data: serverTimestamp()
+        data: serverTimestamp() // Carimbo de tempo oficial do Google
       });
       setNovoPost('');
     } catch (error) {
-      console.error("Erro ao salvar:", error);
+      console.error("Erro ao salvar no Firebase:", error);
+      alert("Erro ao salvar! Verifique se as regras do banco estão em 'Modo de Teste'.");
     }
   }
 
   // 3. CURTIR (Atualiza no Firebase)
   async function curtir(id, jaCurtido) {
-    const postRef = doc(db, "posts", id);
-    await updateDoc(postRef, {
-      curtidas: increment(jaCurtido ? -1 : 1)
-    });
+    try {
+      const postRef = doc(db, "posts", id);
+      await updateDoc(postRef, {
+        curtidas: increment(jaCurtido ? -1 : 1)
+      });
+    } catch (error) {
+      console.error("Erro ao curtir:", error);
+    }
   }
 
   function mandarEi(postId, usuario) {
@@ -70,7 +80,6 @@ function Feed({ onPerfil, onComunidades }) {
   return (
     <div style={{ minHeight: '100vh', background: '#f0f2f5', fontFamily: 'sans-serif' }}>
       
-      {/* Notificação Toast */}
       {toast && (
         <div style={{
           position: 'fixed', top: '80px', left: '50%', transform: 'translateX(-50%)',
@@ -82,7 +91,6 @@ function Feed({ onPerfil, onComunidades }) {
         </div>
       )}
 
-      {/* Header Estilo Orkut/Ei */}
       <div style={{
         background: 'linear-gradient(90deg, #002776, #009c3b)', padding: '12px 24px',
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -98,7 +106,6 @@ function Feed({ onPerfil, onComunidades }) {
 
       <div style={{ maxWidth: '600px', margin: '24px auto', padding: '0 16px' }}>
         
-        {/* Caixa de Texto */}
         <div style={{ background: 'white', borderRadius: '16px', padding: '16px', marginBottom: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
           <div style={{ display: 'flex', gap: '12px' }}>
             <span style={{ fontSize: '36px' }}>🧑</span>
@@ -124,7 +131,6 @@ function Feed({ onPerfil, onComunidades }) {
           </div>
         </div>
 
-        {/* Lista de Posts */}
         {posts.map((post) => (
           <div key={post.id} style={{ background: 'white', borderRadius: '16px', padding: '20px', marginBottom: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
