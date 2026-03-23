@@ -6,7 +6,6 @@ function Perfil({ usuario }) {
   const [carregando, setCarregando] = useState(true)
   const [editando, setEditando] = useState(false)
   const [menuFoto, setMenuFoto] = useState(false)
-  const LIMITE_BIO = 160
 
   const [dadosPerfil, setDadosPerfil] = useState({
     nome: '',
@@ -28,24 +27,26 @@ function Perfil({ usuario }) {
           const data = docSnap.data()
 
           setDadosPerfil({
-            nome: data.nome || usuario.displayName || usuario.email?.split('@')[0] || 'Usuario',
+            nome: data.nome || usuario.displayName || usuario.email?.split('@')[0],
             bio: data.bio || '',
             local: data.local || ''
           })
 
           if (data.foto) setFoto(data.foto)
           else if (usuario.photoURL) setFoto(usuario.photoURL)
+
         } else {
           setDadosPerfil({
-            nome: usuario.displayName || usuario.email?.split('@')[0] || 'Usuario',
+            nome: usuario.displayName || usuario.email?.split('@')[0],
             bio: '',
             local: ''
           })
 
           if (usuario.photoURL) setFoto(usuario.photoURL)
         }
-      } catch (error) {
-        console.error(error)
+
+      } catch (e) {
+        console.error(e)
       }
 
       setCarregando(false)
@@ -54,28 +55,18 @@ function Perfil({ usuario }) {
     carregarDados()
   }, [usuario])
 
-  async function salvarAlteracoes() {
+  async function salvar() {
     if (!usuario?.uid) return
 
-    if (dadosPerfil.bio.length > LIMITE_BIO) {
-      alert('Sua bio está muito longa!')
-      return
-    }
+    await setDoc(doc(db, 'usuarios', usuario.uid), {
+      ...dadosPerfil,
+      foto
+    })
 
-    try {
-      await setDoc(doc(db, 'usuarios', usuario.uid), {
-        ...dadosPerfil,
-        foto
-      })
-
-      setEditando(false)
-    } catch (error) {
-      console.error(error)
-      alert('Erro ao salvar')
-    }
+    setEditando(false)
   }
 
-  function handleFotoUpload(e) {
+  function uploadFoto(e) {
     const file = e.target.files[0]
     if (!file) return
 
@@ -84,101 +75,86 @@ function Perfil({ usuario }) {
       setFoto(ev.target.result)
       setMenuFoto(false)
     }
-
     reader.readAsDataURL(file)
   }
 
-  if (carregando) {
-    return <div style={{ textAlign: 'center', padding: '50px' }}>Carregando...</div>
-  }
+  if (carregando) return <div style={{ padding: 40 }}>Carregando...</div>
 
   return (
     <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
 
       {/* BANNER */}
       <div style={{
-        height: '200px',
-        background: 'linear-gradient(135deg, #002776, #009c3b, #ffdf00)',
+        height: 200,
+        background: 'linear-gradient(135deg,#002776,#009c3b,#ffdf00)',
         position: 'relative'
       }}>
 
         {/* AVATAR */}
         <div style={{
           position: 'absolute',
-          bottom: '-50px',
+          bottom: -55,
           left: '50%',
           transform: 'translateX(-50%)'
         }}>
 
-          <div
-            className="avatar-hover"
-            style={{
-              width: '110px',
-              height: '110px',
-              borderRadius: '50%',
-              background: 'white',
-              border: '4px solid white',
-              overflow: 'hidden',
-              position: 'relative',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '50px'
-            }}
-          >
+          <div className="avatar-hover" style={{
+            width: 110,
+            height: 110,
+            borderRadius: '50%',
+            overflow: 'hidden',
+            position: 'relative',
+            border: '4px solid white',
+            background: '#fff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 50
+          }}>
 
-            {foto ? (
-              <img
-                src={foto}
-                alt="Foto"
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              />
-            ) : '👤'}
+            {foto
+              ? <img src={foto} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : '👤'
+            }
 
-            {/* OVERLAY CAMERA */}
+            {/* OVERLAY BRANCO */}
             <div
-              onClick={() => setMenuFoto(!menuFoto)}
               className="camera-overlay"
+              onClick={() => setMenuFoto(!menuFoto)}
               style={{
                 position: 'absolute',
                 inset: 0,
                 borderRadius: '50%',
-                background: 'rgba(0,0,0,0.5)',
-                color: '#fff',
+                background: 'rgba(255,255,255,0.6)',
+                backdropFilter: 'blur(4px)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: '24px',
                 opacity: 0,
                 transition: '0.3s',
                 cursor: 'pointer'
               }}
             >
-              📷
+              <span style={{ fontSize: 26, color: '#002776' }}>📷</span>
             </div>
           </div>
 
           {/* MENU FOTO */}
           {menuFoto && (
             <div style={{
-              marginTop: '10px',
-              background: 'white',
-              borderRadius: '10px',
-              padding: '8px',
+              marginTop: 10,
+              background: '#fff',
+              padding: 10,
+              borderRadius: 10,
               boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
               display: 'flex',
               flexDirection: 'column',
-              gap: '6px'
+              gap: 6,
+              alignItems: 'center'
             }}>
-              <label style={{ cursor: 'pointer', fontSize: '12px' }}>
-                📤 Enviar foto
-                <input
-                  type="file"
-                  accept="image/*"
-                  style={{ display: 'none' }}
-                  onChange={handleFotoUpload}
-                />
+              <label style={{ cursor: 'pointer' }}>
+                📤 Enviar
+                <input type="file" style={{ display: 'none' }} onChange={uploadFoto} />
               </label>
 
               {foto && (
@@ -195,27 +171,27 @@ function Perfil({ usuario }) {
           onClick={() => setEditando(!editando)}
           style={{
             position: 'absolute',
-            right: '20px',
-            bottom: '20px',
-            padding: '8px 18px',
-            borderRadius: '20px',
+            right: 20,
+            bottom: 20,
+            padding: '8px 16px',
+            borderRadius: 20,
             border: 'none',
-            background: editando ? '#ff4444' : '#ffdf00',
-            color: editando ? 'white' : '#002776',
+            background: '#ffdf00',
             fontWeight: 'bold',
             cursor: 'pointer'
           }}
         >
-          {editando ? '❌ Cancelar' : '✏️ Editar'}
+          ✏️ Editar
         </button>
       </div>
 
       {/* CONTEÚDO */}
-      <div style={{ textAlign: 'center', marginTop: '60px' }}>
+      <div style={{ textAlign: 'center', marginTop: 70 }}>
         <h2>{dadosPerfil.nome}</h2>
         {dadosPerfil.local && <p>📍 {dadosPerfil.local}</p>}
-        <p>{dadosPerfil.bio || 'Escreva algo sobre você!'}</p>
+        <p>{dadosPerfil.bio || 'Sem bio ainda...'}</p>
       </div>
+
     </div>
   )
 }
