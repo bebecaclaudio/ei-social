@@ -37,3 +37,7 @@ input, textarea {
   background: rgba(0,0,0,0.2);
   border-radius: 10px;
 }
+
+.avatar-hover:hover .camera-overlay {
+  opacity: 1;
+}
