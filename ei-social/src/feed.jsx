@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react'
 import { db } from './firebase-config' 
 import { 
   collection, addDoc, onSnapshot, query, 
-  orderBy, serverTimestamp, doc, updateDoc, increment, arrayUnion, arrayRemove 
+  orderBy, serverTimestamp, doc, updateDoc, increment, arrayUnion, arrayRemove,
+  deleteDoc 
 } from 'firebase/firestore'
 
 function Feed({ usuario }) {
@@ -12,14 +13,14 @@ function Feed({ usuario }) {
   const [eiEnviados, setEiEnviados] = useState([])
   const [toast, setToast] = useState(null)
 
+  // Estados para Edição
+  const [editandoId, setEditandoId] = useState(null)
+  const [textoEditado, setTextoEditado] = useState('')
+
   useEffect(() => {
     const q = query(collection(db, "posts"), orderBy("data", "desc"))
     const unsub = onSnapshot(q, (snapshot) => {
-      const postsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }))
-      setPosts(postsData)
+      setPosts(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })))
     })
     return () => unsub()
   }, [])
@@ -37,109 +38,103 @@ function Feed({ usuario }) {
         data: serverTimestamp()
       })
       setNovoPost('')
-    } catch (e) {
-      console.error("Erro ao publicar:", e)
-    }
+    } catch (e) { console.error(e) }
   }
 
-  async function curtir(post) {
-    const postRef = doc(db, "posts", post.id)
-    const jaCurtiu = post.curtidores?.includes(usuario?.uid)
+  // --- FUNÇÃO DE SALVAR EDIÇÃO ---
+  async function salvarEdicao(postId) {
+    if (textoEditado.trim() === '') return
     try {
-      await updateDoc(postRef, {
-        curtidas: increment(jaCurtiu ? -1 : 1),
-        curtidores: jaCurtiu ? arrayRemove(usuario?.uid) : arrayUnion(usuario?.uid)
-      })
-    } catch (e) {
-      console.error("Erro ao curtir:", e)
-    }
+      const postRef = doc(db, "posts", postId)
+      await updateDoc(postRef, { texto: textoEditado })
+      setEditandoId(null)
+      setToast('Post atualizado!')
+      setTimeout(() => setToast(null), 2000)
+    } catch (e) { console.error(e) }
   }
 
-  function mandarEi(postId, nomeUsuario) {
-    if (eiEnviados.includes(postId)) return
-    setEiEnviados([...eiEnviados, postId])
-    setToast('Ei mandado para ' + nomeUsuario + '!')
-    setTimeout(() => setToast(null), 3000)
+  async function excluirPost(postId, autorUid) {
+    if (autorUid !== usuario?.uid) return
+    if (window.confirm("Excluir esta cutucada pra sempre?")) {
+      try {
+        await deleteDoc(doc(db, "posts", postId))
+        setToast('Excluído!')
+        setTimeout(() => setToast(null), 2000)
+      } catch (e) { console.error(e) }
+    }
   }
 
   return (
     <div style={{ minHeight: '100vh', background: '#f0f2f5', paddingBottom: '80px' }}>
-
       {toast && <div style={toastStyle}>{toast}</div>}
 
       <div style={{ maxWidth: '600px', margin: '0 auto', padding: '24px 16px' }}>
-
-        {/* INPUT DE POSTAGEM - TEXTO ESCURO GARANTIDO */}
+        
+        {/* INPUT DE POSTAGEM */}
         <div style={cardEstilo}>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
             <span style={{ fontSize: '36px' }}>🧑</span>
             <textarea
-              placeholder="No que você está pensando?"
+              placeholder="No que voce esta pensando?"
               value={novoPost}
               onChange={(e) => setNovoPost(e.target.value)}
               onFocus={() => setFocado(true)}
               onBlur={() => setFocado(false)}
-              style={{
-                ...textareaEstilo,
-                border: focado ? '2px solid #009c3b' : '2px solid #ddd',
-                color: '#222', // COR DO TEXTO QUE VOCÊ DIGITA
-                backgroundColor: '#ffffff'
-              }}
+              style={{...textareaEstilo, border: focado ? '2px solid #009c3b' : '2px solid #ddd', color: '#333'}}
             />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
-            <span style={{ color: focado ? '#009c3b' : '#666', fontSize: '13px' }}>
-              {novoPost.length}/280 caracteres
-            </span>
+          <div style={{ display: 'flex', justifyContent: 'end', marginTop: '12px' }}>
             <button onClick={publicar} style={{
               ...btnPublicar,
               background: novoPost.trim() === '' ? '#ccc' : 'linear-gradient(90deg, #002776, #009c3b)',
-              cursor: novoPost.trim() === '' ? 'not-allowed' : 'pointer'
             }}>Publicar</button>
           </div>
         </div>
 
         {/* LISTA DE POSTS */}
         {posts.map((post) => {
-          const eiJaEnviado = eiEnviados.includes(post.id)
-          const postCurtidoPorMim = post.curtidores?.includes(usuario?.uid)
-          const souEu = post.autorUid === usuario?.uid || post.usuario === (usuario?.displayName || 'Você')
+          const souEu = post.autorUid === usuario?.uid
+          const isEditando = editandoId === post.id
 
           return (
-            <div key={post.id} style={cardEstilo}>
+            <div key={post.id} style={{...cardEstilo, position: 'relative' }}>
+              
+              {/* BOTÕES DE AÇÃO (LÁPIS E LIXEIRA) */}
+              {souEu && !isEditando && (
+                <div style={{ position: 'absolute', top: '20px', right: '20px', display: 'flex', gap: '10px' }}>
+                  <span title="Editar" onClick={() => { setEditandoId(post.id); setTextoEditado(post.texto); }} style={iconBtn}>✏️</span>
+                  <span title="Excluir" onClick={() => excluirPost(post.id, post.autorUid)} style={iconBtn}>🗑️</span>
+                </div>
+              )}
+
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
                 <span style={{ fontSize: '40px' }}>{post.avatar}</span>
                 <div>
-                  <p style={{ fontWeight: 'bold', fontSize: '15px', color: '#111' }}>{post.usuario}</p>
-                  <p style={{ color: '#666', fontSize: '13px' }}>
-                    {post.data?.toDate ? post.data.toDate().toLocaleTimeString() : 'agora mesmo'}
-                  </p>
+                  <p style={{ fontWeight: 'bold', fontSize: '15px', color: '#222' }}>{post.usuario}</p>
+                  <p style={{ color: '#888', fontSize: '12px' }}>{post.data?.toDate ? post.data.toDate().toLocaleTimeString() : '...'}</p>
                 </div>
               </div>
 
-              {/* TEXTO DO POST - COR ESCURA */}
-              <p style={{ fontSize: '16px', marginBottom: '16px', whiteSpace: 'pre-wrap', color: '#333' }}>
-                {post.texto}
-              </p>
+              {/* CONTEÚDO: TEXTO OU ÁREA DE EDIÇÃO */}
+              {isEditando ? (
+                <div style={{ marginBottom: '15px' }}>
+                  <textarea 
+                    value={textoEditado}
+                    onChange={(e) => setTextoEditado(e.target.value)}
+                    style={{...textareaEstilo, height: '60px', border: '1px solid #009c3b', color: '#333'}}
+                  />
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '8px', justifyContent: 'end' }}>
+                    <button onClick={() => setEditandoId(null)} style={btnCancel}>Cancelar</button>
+                    <button onClick={() => salvarEdicao(post.id)} style={btnSave}>Salvar</button>
+                  </div>
+                </div>
+              ) : (
+                <p style={{ fontSize: '16px', marginBottom: '16px', color: '#333', whiteSpace: 'pre-wrap' }}>{post.texto}</p>
+              )}
               
               <div style={barraAcoes}>
-                <button onClick={() => curtir(post)} style={{
-                  ...btnAcao,
-                  background: postCurtidoPorMim ? '#fff0f0' : 'none',
-                  color: postCurtidoPorMim ? '#e00' : '#444'
-                }}>
-                  {postCurtidoPorMim ? '❤️' : '🤍'} {post.curtidas || 0}
-                </button>
-                <button style={{...btnAcao, color: '#444'}}>💬 Comentar</button>
-                {!souEu && (
-                  <button onClick={() => mandarEi(post.id, post.usuario)} style={{
-                    ...btnAcao,
-                    background: eiJaEnviado ? '#fffbe6' : 'none',
-                    color: eiJaEnviado ? '#ffaa00' : '#444'
-                  }}>
-                    {eiJaEnviado ? '👋 Ei enviado!' : '👋 Ei!'}
-                  </button>
-                )}
+                <button style={btnAcao}>❤️ {post.curtidas || 0}</button>
+                <button style={btnAcao}>💬 Comentar</button>
               </div>
             </div>
           )
@@ -149,16 +144,15 @@ function Feed({ usuario }) {
   )
 }
 
-// ESTILOS AJUSTADOS PARA CONTRASTE
-const cardEstilo = { background: '#ffffff', borderRadius: '16px', padding: '20px', marginBottom: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' };
-const textareaEstilo = { 
-  flex: 1, padding: '12px 16px', borderRadius: '16px', fontSize: '15px', 
-  outline: 'none', resize: 'none', height: '90px', fontFamily: 'inherit',
-  boxSizing: 'border-box'
-};
-const btnPublicar = { padding: '10px 28px', borderRadius: '10px', border: 'none', color: 'white', fontWeight: 'bold', fontSize: '15px', transition: '0.3s' };
+// ESTILOS ADICIONAIS
+const cardEstilo = { background: 'white', borderRadius: '16px', padding: '20px', marginBottom: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' };
+const textareaEstilo = { flex: 1, padding: '12px', borderRadius: '12px', fontSize: '15px', outline: 'none', background: 'white', resize: 'none', width: '100%', boxSizing: 'border-box', border: '1px solid #ddd' };
+const btnPublicar = { padding: '8px 24px', borderRadius: '10px', border: 'none', color: 'white', fontWeight: 'bold', cursor: 'pointer' };
 const barraAcoes = { display: 'flex', gap: '16px', borderTop: '1px solid #eee', paddingTop: '12px' };
-const btnAcao = { border: 'none', background: 'none', cursor: 'pointer', fontSize: '14px', fontWeight: 'bold', padding: '6px 12px', borderRadius: '20px' };
-const toastStyle = { position: 'fixed', top: '80px', left: '50%', transform: 'translateX(-50%)', background: 'linear-gradient(90deg, #002776, #009c3b)', color: 'white', padding: '12px 24px', borderRadius: '24px', fontWeight: '700', zIndex: 9999 };
+const btnAcao = { border: 'none', background: 'none', cursor: 'pointer', color: '#555', fontWeight: 'bold' };
+const iconBtn = { cursor: 'pointer', opacity: 0.4, transition: '0.2s', fontSize: '16px' };
+const btnSave = { background: '#009c3b', color: 'white', border: 'none', padding: '5px 15px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' };
+const btnCancel = { background: '#eee', color: '#555', border: 'none', padding: '5px 15px', borderRadius: '8px', cursor: 'pointer' };
+const toastStyle = { position: 'fixed', top: '80px', left: '50%', transform: 'translateX(-50%)', background: '#002776', color: 'white', padding: '10px 20px', borderRadius: '20px', zIndex: 999 };
 
 export default Feed;
