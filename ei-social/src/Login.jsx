@@ -15,6 +15,7 @@ function Login() {
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
   const [erro, setErro] = useState('')
+  const [sucesso, setSucesso] = useState('')
   const [carregando, setCarregando] = useState(false)
 
   async function entrar() {
@@ -33,9 +34,11 @@ function Login() {
 
   async function entrarGoogle() {
     try {
+      // Se não tiver conta, o Firebase cria automaticamente!
       await signInWithPopup(auth, provider)
     } catch (e) {
-      setErro('Erro ao entrar com Google.')
+      if (e.code === 'auth/popup-closed-by-user') return
+      setErro('Erro ao entrar com Google. Tente novamente.')
     }
   }
 
@@ -46,60 +49,90 @@ function Login() {
     }
     try {
       await sendPasswordResetEmail(auth, email)
-      alert('Link de recuperação enviado para seu e-mail!')
+      setSucesso('Link de recuperação enviado para seu e-mail!')
+      setErro('')
+      setTimeout(() => setSucesso(''), 5000)
     } catch (e) {
       setErro('Erro ao enviar e-mail de recuperação.')
     }
   }
 
   return (
-    <div style={containerStyle}>
-      <div style={cardStyle}>
-        <img src="/logo.png" alt="Ei" style={{ width: '130px', marginBottom: '10px' }} />
-        <p style={{ color: 'white', opacity: 0.8, marginBottom: '30px' }}>A rede social brasileira</p>
+    <>
+      <style>{`
+        input:-webkit-autofill,
+        input:-webkit-autofill:hover,
+        input:-webkit-autofill:focus {
+          -webkit-box-shadow: 0 0 0px 1000px white inset !important;
+          -webkit-text-fill-color: #111 !important;
+          caret-color: #111 !important;
+        }
+        input::placeholder { color: #888 !important; }
+      `}</style>
 
-        {erro && <p style={erroStyle}>{erro}</p>}
+      <div style={containerStyle}>
+        <div style={cardStyle}>
+          <img src="/logo.png" alt="Ei" style={{ width: '130px', marginBottom: '10px' }} />
+          <p style={{ color: 'white', opacity: 0.8, marginBottom: '30px', fontSize: '15px' }}>
+            A rede social brasileira
+          </p>
 
-        <input
-          type="email"
-          placeholder="E-mail"
-          value={email}
-          onChange={(e) => { setEmail(e.target.value); setErro('') }}
-          onKeyDown={(e) => { if (e.key === 'Enter') entrar() }}
-          style={inputStyle}
-        />
+          {erro && (
+            <div style={erroStyle}>⚠️ {erro}</div>
+          )}
 
-        <input
-          type="password"
-          placeholder="Senha"
-          value={senha}
-          onChange={(e) => { setSenha(e.target.value); setErro('') }}
-          onKeyDown={(e) => { if (e.key === 'Enter') entrar() }}
-          style={inputStyle}
-        />
+          {sucesso && (
+            <div style={sucessoStyle}>✅ {sucesso}</div>
+          )}
 
-        <p onClick={recuperarSenha} style={linkEsqueciStyle}>
-          Esqueceu a senha?
-        </p>
+          <input
+            type="email"
+            placeholder="E-mail"
+            value={email}
+            autoComplete="email"
+            onChange={(e) => { setEmail(e.target.value); setErro('') }}
+            onKeyDown={(e) => { if (e.key === 'Enter') entrar() }}
+            style={inputStyle}
+          />
 
-        <button onClick={entrar} disabled={carregando} style={buttonStyle}>
-          {carregando ? 'CARREGANDO...' : 'ENTRAR'}
-        </button>
+          <input
+            type="password"
+            placeholder="Senha"
+            value={senha}
+            autoComplete="current-password"
+            onChange={(e) => { setSenha(e.target.value); setErro('') }}
+            onKeyDown={(e) => { if (e.key === 'Enter') entrar() }}
+            style={inputStyle}
+          />
 
-        <div style={divisorStyle}>OU</div>
+          <p onClick={recuperarSenha} style={linkEsqueciStyle}>
+            Esqueceu a senha?
+          </p>
 
-        <button onClick={entrarGoogle} style={googleButtonStyle}>
-          Entrar com Google
-        </button>
+          <button onClick={entrar} disabled={carregando} style={{
+            ...buttonStyle,
+            opacity: carregando ? 0.7 : 1,
+            cursor: carregando ? 'not-allowed' : 'pointer'
+          }}>
+            {carregando ? 'CARREGANDO...' : 'ENTRAR'}
+          </button>
 
-        <p style={{ color: 'white', marginTop: '25px', fontSize: '14px' }}>
-          Novo por aqui?{' '}
-          <span onClick={() => navigate('/cadastro')} style={linkCadastrarStyle}>
-            Cadastre-se
-          </span>
-        </p>
+          <div style={divisorStyle}>OU</div>
+
+          <button onClick={entrarGoogle} style={googleButtonStyle}>
+            <span style={{ marginRight: '8px' }}>🔵</span>
+            Entrar com Google
+          </button>
+
+          <p style={{ color: 'rgba(255,255,255,0.8)', marginTop: '25px', fontSize: '14px' }}>
+            Novo por aqui?{' '}
+            <span onClick={() => navigate('/cadastro')} style={linkCadastrarStyle}>
+              Cadastre-se
+            </span>
+          </p>
+        </div>
       </div>
-    </div>
+    </>
   )
 }
 
@@ -110,35 +143,40 @@ const containerStyle = {
 }
 
 const cardStyle = {
-  background: 'rgba(255, 255, 255, 0.1)',
-  backdropFilter: 'blur(15px)',
+  background: 'rgba(0, 0, 0, 0.35)',
+  backdropFilter: 'blur(20px)',
   borderRadius: '28px', padding: '40px', width: '100%',
   maxWidth: '380px', textAlign: 'center',
-  border: '1px solid rgba(255, 255, 255, 0.2)',
-  boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
+  border: '1px solid rgba(255, 255, 255, 0.15)',
+  boxShadow: '0 10px 40px rgba(0,0,0,0.3)'
 }
 
 const inputStyle = {
-  width: '100%', padding: '15px', borderRadius: '12px', border: 'none',
-  marginBottom: '15px', background: 'rgba(255,255,255,0.9)',
-  outline: 'none', boxSizing: 'border-box', color: '#111', fontSize: '15px'
+  width: '100%', padding: '15px', borderRadius: '12px',
+  border: '2px solid transparent',
+  marginBottom: '15px', background: 'white',
+  outline: 'none', boxSizing: 'border-box',
+  color: '#111', fontSize: '15px',
+  transition: 'border 0.2s'
 }
 
 const buttonStyle = {
   width: '100%', padding: '15px', borderRadius: '12px', border: 'none',
-  background: '#ffdf00', color: '#002776', fontWeight: 'bold',
-  cursor: 'pointer', fontSize: '16px'
+  background: '#ffdf00', color: '#002776', fontWeight: 'bold', fontSize: '16px'
 }
 
 const googleButtonStyle = {
   width: '100%', padding: '12px', borderRadius: '12px',
-  border: '1px solid white', background: 'transparent',
-  color: 'white', fontWeight: '600', cursor: 'pointer'
+  border: '2px solid rgba(255,255,255,0.5)',
+  background: 'rgba(255,255,255,0.1)',
+  color: 'white', fontWeight: '600', cursor: 'pointer',
+  fontSize: '15px', transition: 'all 0.2s'
 }
 
 const linkEsqueciStyle = {
-  color: 'white', fontSize: '12px', textAlign: 'right', cursor: 'pointer',
-  marginTop: '-10px', marginBottom: '20px', textDecoration: 'underline', opacity: 0.8
+  color: 'rgba(255,255,255,0.7)', fontSize: '12px', textAlign: 'right',
+  cursor: 'pointer', marginTop: '-10px', marginBottom: '20px',
+  textDecoration: 'underline'
 }
 
 const linkCadastrarStyle = {
@@ -146,8 +184,17 @@ const linkCadastrarStyle = {
 }
 
 const erroStyle = {
-  color: '#ffdf00', background: 'rgba(0,0,0,0.3)', padding: '10px',
-  borderRadius: '8px', fontSize: '13px', marginBottom: '15px'
+  color: '#ffdf00', background: 'rgba(255,50,50,0.2)',
+  border: '1px solid rgba(255,100,100,0.4)',
+  padding: '10px', borderRadius: '8px',
+  fontSize: '13px', marginBottom: '15px'
+}
+
+const sucessoStyle = {
+  color: '#00ff88', background: 'rgba(0,200,100,0.15)',
+  border: '1px solid rgba(0,200,100,0.3)',
+  padding: '10px', borderRadius: '8px',
+  fontSize: '13px', marginBottom: '15px'
 }
 
 const divisorStyle = {
