@@ -117,7 +117,7 @@ function Perfil({ usuario }) {
         </div>
       </div>
 
-      {/* INFORMAÇÕES DO USUÁRIO (A PARTE QUE SUMIU) */}
+      {/* INFORMAÇÕES DO USUÁRIO (COM CORREÇÃO DE CONTRASTE) */}
       <div style={{ textAlign: 'center', marginTop: '70px', padding: '0 20px' }}>
         {editando ? (
           <div style={formStyle}>
@@ -132,9 +132,12 @@ function Perfil({ usuario }) {
           </div>
         ) : (
           <div style={{maxWidth: '500px', margin: '0 auto'}}>
-            <h1 style={{fontSize: '28px', margin: '0'}}>{dadosPerfil.nome}</h1>
-            <p style={{color: '#009c3b', fontWeight: 'bold', margin: '5px 0'}}>📍 {dadosPerfil.local || 'Brasil'}</p>
-            <p style={{color: '#555', lineHeight: '1.6'}}>{dadosPerfil.bio || "Sua biografia aparecerá aqui."}</p>
+            {/* CORREÇÃO AQUI: COR DO NOME ALTERADA PARA PRETO CLARO */}
+            <h1 style={{fontSize: '28px', margin: '0', color: '#1a1a1a'}}>{dadosPerfil.nome}</h1>
+            {/* CORREÇÃO AQUI: COR DA LOCALIZAÇÃO ALTERADA PARA VERDE ESCURO */}
+            <p style={{color: '#00702a', fontWeight: 'bold', margin: '5px 0'}}>📍 {dadosPerfil.local || 'Brasil'}</p>
+            {/* CORREÇÃO AQUI: COR DA BIO ALTERADA PARA CINZA ESCURO */}
+            <p style={{color: '#4a4a4a', lineHeight: '1.6'}}>{dadosPerfil.bio || "Sua biografia aparecerá aqui."}</p>
             <button style={btnEdit} onClick={() => setEditando(true)}>✏️ CONFIGURAR PERFIL</button>
           </div>
         )}
