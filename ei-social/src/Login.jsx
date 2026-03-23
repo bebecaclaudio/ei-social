@@ -1,21 +1,22 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { auth } from './firebase-config'
-import { 
-  signInWithEmailAndPassword, 
-  signInWithPopup, 
+import {
+  signInWithEmailAndPassword,
+  signInWithPopup,
   GoogleAuthProvider,
-  sendPasswordResetEmail 
+  sendPasswordResetEmail
 } from 'firebase/auth'
 
 const provider = new GoogleAuthProvider()
 
-function Login({ onCadastro }) {
+function Login() {
+  const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
   const [erro, setErro] = useState('')
   const [carregando, setCarregando] = useState(false)
 
-  // Função para Entrar
   async function entrar() {
     if (!email || !senha) {
       setErro('Preencha e-mail e senha!')
@@ -30,7 +31,6 @@ function Login({ onCadastro }) {
     }
   }
 
-  // Função Google
   async function entrarGoogle() {
     try {
       await signInWithPopup(auth, provider)
@@ -39,7 +39,6 @@ function Login({ onCadastro }) {
     }
   }
 
-  // Função Esqueci a Senha
   async function recuperarSenha() {
     if (!email) {
       setErro('Digite seu e-mail acima para recuperar a senha.')
@@ -65,7 +64,8 @@ function Login({ onCadastro }) {
           type="email"
           placeholder="E-mail"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(e) => { setEmail(e.target.value); setErro('') }}
+          onKeyDown={(e) => { if (e.key === 'Enter') entrar() }}
           style={inputStyle}
         />
 
@@ -73,7 +73,8 @@ function Login({ onCadastro }) {
           type="password"
           placeholder="Senha"
           value={senha}
-          onChange={(e) => setSenha(e.target.value)}
+          onChange={(e) => { setSenha(e.target.value); setErro('') }}
+          onKeyDown={(e) => { if (e.key === 'Enter') entrar() }}
           style={inputStyle}
         />
 
@@ -92,8 +93,8 @@ function Login({ onCadastro }) {
         </button>
 
         <p style={{ color: 'white', marginTop: '25px', fontSize: '14px' }}>
-          Novo por aqui? {' '}
-          <span onClick={onCadastro} style={linkCadastrarStyle}>
+          Novo por aqui?{' '}
+          <span onClick={() => navigate('/cadastro')} style={linkCadastrarStyle}>
             Cadastre-se
           </span>
         </p>
@@ -101,8 +102,6 @@ function Login({ onCadastro }) {
     </div>
   )
 }
-
-// --- ESTILOS (DESIGN CLUBE DO EI) ---
 
 const containerStyle = {
   minHeight: '100vh',
@@ -113,28 +112,28 @@ const containerStyle = {
 const cardStyle = {
   background: 'rgba(255, 255, 255, 0.1)',
   backdropFilter: 'blur(15px)',
-  borderRadius: '28px',
-  padding: '40px',
-  width: '100%',
-  maxWidth: '380px',
-  textAlign: 'center',
+  borderRadius: '28px', padding: '40px', width: '100%',
+  maxWidth: '380px', textAlign: 'center',
   border: '1px solid rgba(255, 255, 255, 0.2)',
   boxShadow: '0 10px 30px rgba(0,0,0,0.2)'
 }
 
 const inputStyle = {
   width: '100%', padding: '15px', borderRadius: '12px', border: 'none',
-  marginBottom: '15px', background: 'rgba(255,255,255,0.9)', outline: 'none', boxSizing: 'border-box'
+  marginBottom: '15px', background: 'rgba(255,255,255,0.9)',
+  outline: 'none', boxSizing: 'border-box', color: '#111', fontSize: '15px'
 }
 
 const buttonStyle = {
   width: '100%', padding: '15px', borderRadius: '12px', border: 'none',
-  background: '#ffdf00', color: '#002776', fontWeight: 'bold', cursor: 'pointer', fontSize: '16px'
+  background: '#ffdf00', color: '#002776', fontWeight: 'bold',
+  cursor: 'pointer', fontSize: '16px'
 }
 
 const googleButtonStyle = {
-  width: '100%', padding: '12px', borderRadius: '12px', border: '1px solid white',
-  background: 'transparent', color: 'white', fontWeight: '600', cursor: 'pointer'
+  width: '100%', padding: '12px', borderRadius: '12px',
+  border: '1px solid white', background: 'transparent',
+  color: 'white', fontWeight: '600', cursor: 'pointer'
 }
 
 const linkEsqueciStyle = {
@@ -147,7 +146,8 @@ const linkCadastrarStyle = {
 }
 
 const erroStyle = {
-  color: '#ffdf00', background: 'rgba(0,0,0,0.3)', padding: '10px', borderRadius: '8px', fontSize: '13px'
+  color: '#ffdf00', background: 'rgba(0,0,0,0.3)', padding: '10px',
+  borderRadius: '8px', fontSize: '13px', marginBottom: '15px'
 }
 
 const divisorStyle = {

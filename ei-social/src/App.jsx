@@ -16,16 +16,11 @@ function Spinner() {
       background: '#f0f2f5',
       display: 'flex',
       alignItems: 'center',
-      justifyContent: 'center',
-      flexDirection: 'column',
-      gap: '16px'
+      justifyContent: 'center'
     }}>
       <div style={{
-        width: '44px',
-        height: '44px',
-        borderRadius: '50%',
-        border: '4px solid #ddd',
-        borderTop: '4px solid #009c3b',
+        width: '44px', height: '44px', borderRadius: '50%',
+        border: '4px solid #ddd', borderTop: '4px solid #009c3b',
         animation: 'spin 0.8s linear infinite'
       }} />
       <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
@@ -58,23 +53,22 @@ function App() {
     }
   }
 
-  if (carregando) return <Spinner />
-
   return (
     <Router>
       <Routes>
 
-        {/* ROTAS PÚBLICAS */}
-        <Route
-          path="/"
-          element={usuario ? <Navigate to="/feed" replace /> : <Login />}
-        />
-        <Route
-          path="/cadastro"
-          element={usuario ? <Navigate to="/feed" replace /> : <Cadastro />}
-        />
+        <Route path="/" element={
+          carregando ? <Spinner /> :
+          usuario ? <Navigate to="/feed" replace /> :
+          <Login />
+        } />
 
-        {/* ROTAS PROTEGIDAS */}
+        <Route path="/cadastro" element={
+          carregando ? <Spinner /> :
+          usuario ? <Navigate to="/feed" replace /> :
+          <Cadastro />
+        } />
+
         <Route path="/feed" element={
           <RotaPrivada usuario={usuario} carregando={carregando}>
             <Layout usuario={usuario} onSair={sair}>
@@ -99,7 +93,6 @@ function App() {
           </RotaPrivada>
         } />
 
-        {/* ROTA DE SEGURANÇA */}
         <Route path="*" element={<Navigate to="/" replace />} />
 
       </Routes>
