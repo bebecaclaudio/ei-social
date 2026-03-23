@@ -1,175 +1,202 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { db } from './firebase-config'
+import { 
+  collection, 
+  addDoc, 
+  onSnapshot, 
+  doc, 
+  updateDoc, 
+  arrayUnion, 
+  arrayRemove,
+  query,
+  orderBy,
+  setDoc,
+  getDoc
+} from 'firebase/firestore'
 
-function Comunidades() {
-  const [comunidades, setComunidades] = useState([
-    { id: 1, nome: 'Saudades do Orkut', membros: 4821, categoria: 'Nostalgia', emoji: '💾' },
-    { id: 2, nome: 'Pagode e Samba', membros: 3200, categoria: 'Musica', emoji: '🎵' },
-    { id: 3, nome: 'Receitas Brasileiras', membros: 2900, categoria: 'Gastronomia', emoji: '🍖' },
-    { id: 4, nome: 'Filmes Nacionais', membros: 1500, categoria: 'Cinema', emoji: '🎬' },
-    { id: 5, nome: 'Programadores BR', membros: 5100, categoria: 'Tecnologia', emoji: '💻' },
-    { id: 6, nome: 'Futebol Brasileiro', membros: 9999, categoria: 'Esportes', emoji: '⚽' },
-  ])
-
-  const [minhasComunidades, setMinhasComunidades] = useState([1, 5])
+function Comunidades({ usuario }) {
+  const [comunidades, setComunidades] = useState([])
+  const [minhasComunidades, setMinhasComunidades] = useState([])
   const [criando, setCriando] = useState(false)
-  const [novaComunidade, setNovaComunidade] = useState({ nome: '', categoria: '', emoji: '' })
   const [busca, setBusca] = useState('')
+  const [novaComunidade, setNovaComunidade] = useState({ nome: '', categoria: '', emoji: '' })
 
-  function entrarSair(id) {
-    if (minhasComunidades.includes(id)) {
-      setMinhasComunidades(minhasComunidades.filter(function(c) { return c !== id }))
-      setComunidades(comunidades.map(function(c) {
-        return c.id === id ? { ...c, membros: c.membros - 1 } : c
+  // 1. CARREGAR COMUNIDADES DO BANCO (REALTIME)
+  useEffect(() => {
+    const q = query(collection(db, 'comunidades'), orderBy('dataCriacao', 'desc'))
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const dados = snapshot.docs.map(doc => ({ 
+        id: doc.id, 
+        ...doc.data() 
       }))
-    } else {
-      setMinhasComunidades([...minhasComunidades, id])
-      setComunidades(comunidades.map(function(c) {
-        return c.id === id ? { ...c, membros: c.membros + 1 } : c
-      }))
+      setComunidades(dados)
+    })
+    return () => unsubscribe()
+  }, [])
+
+  // 2. CARREGAR MINHAS INSCRIÇÕES (EVITA SAIR AO ATUALIZAR)
+  useEffect(() => {
+    if (!usuario?.uid) return
+
+    const userRef = doc(db, 'usuarios', usuario.uid)
+    
+    const unsubscribe = onSnapshot(userRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setMinhasComunidades(docSnap.data().comunidadesInscritas || [])
+      } else {
+        // Se o doc do usuário não existir, cria um vazio para evitar erros
+        setDoc(userRef, { comunidadesInscritas: [] }, { merge: true })
+      }
+    })
+
+    return () => unsubscribe()
+  }, [usuario])
+
+  // 3. CRIAR COMUNIDADE REAL NO FIREBASE
+  const criarComunidade = async () => {
+    if (!novaComunidade.nome.trim() || !usuario?.uid) {
+      alert("Erro: Verifique se você está logado e se deu um nome à comunidade.")
+      return
+    }
+
+    try {
+      const docRef = await addDoc(collection(db, 'comunidades'), {
+        nome: novaComunidade.nome,
+        categoria: novaComunidade.categoria || 'Geral',
+        emoji: novaComunidade.emoji || '👥',
+        membrosCount: 1,
+        criadoPor: usuario.uid,
+        dataCriacao: new Date()
+      })
+
+      // Adiciona automaticamente ao perfil do usuário
+      await updateDoc(doc(db, 'usuarios', usuario.uid), {
+        comunidadesInscritas: arrayUnion(docRef.id)
+      })
+
+      setNovaComunidade({ nome: '', categoria: '', emoji: '' })
+      setCriando(false)
+      alert("Comunidade criada com sucesso!")
+    } catch (e) {
+      console.error(e)
+      alert("Erro ao salvar no banco de dados.")
     }
   }
 
-  function criarComunidade() {
-    if (novaComunidade.nome.trim() === '') return
-    const nova = {
-      id: Date.now(),
-      nome: novaComunidade.nome,
-      categoria: novaComunidade.categoria || 'Geral',
-      emoji: novaComunidade.emoji || '⭐',
-      membros: 1
+  // 4. PARTICIPAR / SAIR (ATUALIZA O BANCO E O CONTADOR)
+  const toggleParticipacao = async (comunidadeId) => {
+    if (!usuario?.uid) return alert("Logue para participar")
+
+    const jaParticipa = minhasComunidades.includes(comunidadeId)
+    const userRef = doc(db, 'usuarios', usuario.uid)
+    const comRef = doc(db, 'comunidades', comunidadeId)
+
+    try {
+      if (jaParticipa) {
+        await updateDoc(userRef, { comunidadesInscritas: arrayRemove(comunidadeId) })
+        const comSnap = await getDoc(comRef)
+        const novoTotal = Math.max(0, (comSnap.data().membrosCount || 1) - 1)
+        await updateDoc(comRef, { membrosCount: novoTotal })
+      } else {
+        await updateDoc(userRef, { comunidadesInscritas: arrayUnion(comunidadeId) })
+        const comSnap = await getDoc(comRef)
+        const novoTotal = (comSnap.data().membrosCount || 0) + 1
+        await updateDoc(comRef, { membrosCount: novoTotal })
+      }
+    } catch (e) {
+      console.error("Erro na persistência:", e)
     }
-    setComunidades([nova, ...comunidades])
-    setMinhasComunidades([...minhasComunidades, nova.id])
-    setNovaComunidade({ nome: '', categoria: '', emoji: '' })
-    setCriando(false)
   }
 
-  const filtradas = comunidades.filter(function(c) {
-    return c.nome.toLowerCase().includes(busca.toLowerCase())
-  })
+  const filtradas = comunidades.filter(c => 
+    c.nome.toLowerCase().includes(busca.toLowerCase())
+  )
+
+  // ESTILOS DE ALTO CONTRASTE PARA OS CAMPOS
+  const inputEstilo = {
+    width: '100%',
+    padding: '12px',
+    marginBottom: '10px',
+    borderRadius: '8px',
+    border: '2px solid #333', // Borda escura para ver o campo
+    backgroundColor: '#fff',
+    color: '#000',
+    fontSize: '16px',
+    boxSizing: 'border-box'
+  }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
-      <div style={{ maxWidth: '700px', margin: '24px auto', padding: '0 16px' }}>
+    <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto', fontFamily: 'sans-serif' }}>
+      
+      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
+        <input 
+          style={{ ...inputEstilo, marginBottom: 0, flex: 1 }}
+          placeholder="Buscar comunidades..." 
+          onChange={e => setBusca(e.target.value)}
+        />
+        <button 
+          onClick={() => setCriando(!criando)}
+          style={{ padding: '0 20px', background: '#002776', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }}
+        >
+          {criando ? 'Cancelar' : '+ Criar'}
+        </button>
+      </div>
 
-        <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
-          <input
-            placeholder="Buscar comunidade..."
-            value={busca}
-            onChange={function(e) { setBusca(e.target.value) }}
-            style={{
-              flex: 1, padding: '12px 18px', borderRadius: '12px',
-              border: '2px solid #ddd', fontSize: '15px', outline: 'none', color: '#333'
-            }}
+      {criando && (
+        <div style={{ background: '#eee', padding: '20px', borderRadius: '12px', marginBottom: '20px', border: '1px solid #ccc' }}>
+          <h3 style={{ color: '#000', marginTop: 0 }}>Criar nova</h3>
+          
+          <label style={{ fontWeight: 'bold', display: 'block', color: '#000' }}>Nome:</label>
+          <input 
+            style={inputEstilo}
+            value={novaComunidade.nome}
+            onChange={e => setNovaComunidade({...novaComunidade, nome: e.target.value})}
           />
-          <button onClick={function() { setCriando(true) }} style={{
-            padding: '12px 20px', borderRadius: '12px', border: 'none',
-            background: 'linear-gradient(90deg, #002776, #009c3b)',
-            color: 'white', fontWeight: '800', fontSize: '15px', cursor: 'pointer'
-          }}>+ Criar</button>
-        </div>
 
-        {criando && (
-          <div style={{
-            background: 'white', borderRadius: '16px', padding: '24px',
-            marginBottom: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
-            border: '2px solid #009c3b'
-          }}>
-            <h3 style={{ marginBottom: '16px', color: '#002776' }}>Nova Comunidade</h3>
-            <input
-              placeholder="Nome da comunidade"
-              value={novaComunidade.nome}
-              onChange={function(e) { setNovaComunidade({ ...novaComunidade, nome: e.target.value }) }}
-              style={{
-                width: '100%', padding: '12px', borderRadius: '10px',
-                border: '1px solid #ddd', fontSize: '15px', outline: 'none',
-                marginBottom: '12px', color: '#333', boxSizing: 'border-box'
-              }}
-            />
-            <input
-              placeholder="Categoria (ex: Musica, Esportes...)"
-              value={novaComunidade.categoria}
-              onChange={function(e) { setNovaComunidade({ ...novaComunidade, categoria: e.target.value }) }}
-              style={{
-                width: '100%', padding: '12px', borderRadius: '10px',
-                border: '1px solid #ddd', fontSize: '15px', outline: 'none',
-                marginBottom: '12px', color: '#333', boxSizing: 'border-box'
-              }}
-            />
-            <input
-              placeholder="Emoji (ex: 🎸)"
-              value={novaComunidade.emoji}
-              onChange={function(e) { setNovaComunidade({ ...novaComunidade, emoji: e.target.value }) }}
-              style={{
-                width: '100%', padding: '12px', borderRadius: '10px',
-                border: '1px solid #ddd', fontSize: '15px', outline: 'none',
-                marginBottom: '16px', color: '#333', boxSizing: 'border-box'
-              }}
-            />
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button onClick={criarComunidade} style={{
-                flex: 1, padding: '12px', borderRadius: '10px', border: 'none',
-                background: '#ffdf00', color: '#002776', fontWeight: '800',
-                fontSize: '15px', cursor: 'pointer'
-              }}>Criar!</button>
-              <button onClick={function() { setCriando(false) }} style={{
-                flex: 1, padding: '12px', borderRadius: '10px',
-                border: '2px solid #ddd', background: 'white',
-                color: '#555', fontWeight: '700', fontSize: '15px', cursor: 'pointer'
-              }}>Cancelar</button>
+          <label style={{ fontWeight: 'bold', display: 'block', color: '#000' }}>Categoria:</label>
+          <input 
+            style={inputEstilo}
+            value={novaComunidade.categoria}
+            onChange={e => setNovaComunidade({...novaComunidade, categoria: e.target.value})}
+          />
+
+          <label style={{ fontWeight: 'bold', display: 'block', color: '#000' }}>Emoji:</label>
+          <input 
+            style={inputEstilo}
+            value={novaComunidade.emoji}
+            onChange={e => setNovaComunidade({...novaComunidade, emoji: e.target.value})}
+          />
+
+          <button 
+            onClick={criarComunidade}
+            style={{ width: '100%', padding: '15px', background: '#009c3b', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}
+          >
+            GRAVAR NO BANCO DE DADOS
+          </button>
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '15px' }}>
+        {filtradas.map(c => {
+          const participando = minhasComunidades.includes(c.id)
+          return (
+            <div key={c.id} style={{ background: 'white', padding: '15px', borderRadius: '12px', textAlign: 'center', boxShadow: '0 2px 5px rgba(0,0,0,0.1)' }}>
+              <div style={{ fontSize: '40px' }}>{c.emoji}</div>
+              <h4 style={{ margin: '10px 0', color: '#000' }}>{c.nome}</h4>
+              <p style={{ fontSize: '12px', color: '#666' }}>{c.membrosCount || 0} membros</p>
+              <button 
+                onClick={() => toggleParticipacao(c.id)}
+                style={{ 
+                  width: '100%', marginTop: '10px', padding: '8px', borderRadius: '6px', border: 'none',
+                  background: participando ? '#ff4444' : '#002776',
+                  color: 'white', cursor: 'pointer', fontWeight: 'bold'
+                }}
+              >
+                {participando ? 'Sair' : 'Participar'}
+              </button>
             </div>
-          </div>
-        )}
-
-        <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#002776', marginBottom: '12px' }}>
-          Minhas Comunidades
-        </h2>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '28px' }}>
-          {filtradas.filter(function(c) { return minhasComunidades.includes(c.id) }).map(function(c) {
-            return (
-              <div key={c.id} style={{
-                background: 'white', borderRadius: '16px', padding: '16px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.08)', border: '2px solid #009c3b'
-              }}>
-                <div style={{ fontSize: '40px', marginBottom: '8px' }}>{c.emoji}</div>
-                <p style={{ fontWeight: '800', fontSize: '15px', color: '#222' }}>{c.nome}</p>
-                <p style={{ color: '#888', fontSize: '13px', margin: '4px 0 12px' }}>
-                  {c.membros.toLocaleString()} membros • {c.categoria}
-                </p>
-                <button onClick={function() { entrarSair(c.id) }} style={{
-                  width: '100%', padding: '8px', borderRadius: '8px',
-                  border: '2px solid #e00', background: 'white',
-                  color: '#e00', fontWeight: '700', fontSize: '13px', cursor: 'pointer'
-                }}>Sair</button>
-              </div>
-            )
-          })}
-        </div>
-
-        <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#002776', marginBottom: '12px' }}>
-          Descobrir Comunidades
-        </h2>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-          {filtradas.filter(function(c) { return !minhasComunidades.includes(c.id) }).map(function(c) {
-            return (
-              <div key={c.id} style={{
-                background: 'white', borderRadius: '16px', padding: '16px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
-              }}>
-                <div style={{ fontSize: '40px', marginBottom: '8px' }}>{c.emoji}</div>
-                <p style={{ fontWeight: '800', fontSize: '15px', color: '#222' }}>{c.nome}</p>
-                <p style={{ color: '#888', fontSize: '13px', margin: '4px 0 12px' }}>
-                  {c.membros.toLocaleString()} membros • {c.categoria}
-                </p>
-                <button onClick={function() { entrarSair(c.id) }} style={{
-                  width: '100%', padding: '8px', borderRadius: '8px', border: 'none',
-                  background: 'linear-gradient(90deg, #002776, #009c3b)',
-                  color: 'white', fontWeight: '700', fontSize: '13px', cursor: 'pointer'
-                }}>Participar</button>
-              </div>
-            )
-          })}
-        </div>
+          )
+        })}
       </div>
     </div>
   )
