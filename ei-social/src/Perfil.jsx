@@ -1,127 +1,210 @@
-// ... (Mantenha os imports e a lógica do useEffect e salvar do código anterior)
+import { useState, useEffect, useRef } from 'react' // Adicionado useRef
+import { db } from './firebase-config'
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
 
 function Perfil({ usuario }) {
-  // ... (Mantenha os estados e funções aqui)
+  const [carregando, setCarregando] = useState(true)
+  const [editando, setEditando] = useState(false)
+  const [salvando, setSalvando] = useState(false)
+  const fileInputRef = useRef(null) // Adicionado para controlar o arquivo
+  const LIMITE_BIO = 160
+
+  const [dadosPerfil, setDadosPerfil] = useState({
+    nome: '',
+    bio: '',
+    local: '',
+    fotoUrl: '' 
+  })
+
+  useEffect(() => {
+    async function inicializarPerfil() {
+      if (!usuario?.uid) return
+      
+      try {
+        const docRef = doc(db, 'usuarios', usuario.uid)
+        const docSnap = await getDoc(docRef)
+
+        if (docSnap.exists()) {
+          setDadosPerfil(docSnap.data())
+        } else {
+          const novoPerfil = {
+            nome: usuario.displayName || 'Usuário da Ei',
+            bio: 'Sou novo por aqui! 👋',
+            local: '',
+            fotoUrl: usuario.photoURL || '', 
+            criadoEm: serverTimestamp()
+          }
+          await setDoc(docRef, novoPerfil)
+          setDadosPerfil(novoPerfil)
+        }
+      } catch (error) {
+        console.error("Erro ao carregar perfil:", error)
+      } finally {
+        setCarregando(false)
+      }
+    }
+    inicializarPerfil()
+  }, [usuario])
+
+  // --- NOVAS FUNÇÕES PARA O AVATAR ---
+  const handleTrocarFoto = (e) => {
+    const arquivo = e.target.files[0]
+    if (arquivo) {
+      const urlTemp = URL.createObjectURL(arquivo)
+      setDadosPerfil({ ...dadosPerfil, fotoUrl: urlTemp })
+    }
+  }
+
+  const apagarFoto = (e) => {
+    e.stopPropagation() // Impede de abrir o seletor ao clicar na lixeira
+    setDadosPerfil({ ...dadosPerfil, fotoUrl: '' })
+  }
+
+  async function salvar() {
+    setSalvando(true)
+    try {
+      const docRef = doc(db, 'usuarios', usuario.uid)
+      await setDoc(docRef, dadosPerfil, { merge: true })
+      setEditando(false)
+      alert("Perfil atualizado! ✨")
+    } catch (e) {
+      alert("Erro ao salvar. Tente novamente.")
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  if (carregando) return (
+    <div style={{ display: 'flex', height: '80vh', alignItems: 'center', justifyContent: 'center', color: '#002776', fontWeight: 'bold' }}>
+      Buscando seus dados...
+    </div>
+  )
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8f9fa', paddingBottom: '40px' }}>
+    <div style={{ minHeight: '100vh', background: '#f8f9fa' }}>
       
-      {/* 1. O BANNER BRASILEIRO (Seu gradiente) */}
+      {/* CSS PARA O HOVER (Não altera seu JSX) */}
+      <style>{`
+        .avatar-hover:hover .overlay-ei { opacity: 1 !important; }
+      `}</style>
+      
+      {/* HEADER / BANNER BRASILEIRO */}
       <div style={{
-        height: '220px',
-        background: 'linear-gradient(135deg, #002776 0%, #009c3b 50%, #ffdf00 100%)',
+        height: '180px',
+        background: 'linear-gradient(135deg, #002776 0%, #009c3b 100%)',
         position: 'relative',
         display: 'flex',
-        justifyContent: 'center',
-        boxShadow: 'inset 0 -15px 15px rgba(0,0,0,0.1)'
+        justifyContent: 'center'
       }}>
         
-        {/* --- INÍCIO DA ÁREA DO AVATAR ITERATIVO --- */}
-        {/* Usamos classes CSS para o efeito de hover funcionar */}
-        <div className="avatar-container" style={{
-          position: 'absolute', bottom: '-60px',
-          width: '120px', height: '120px',
-          borderRadius: '50%', background: 'white',
-          border: '5px solid white',
-          boxShadow: '0 8px 25px rgba(0,0,0,0.2)',
-          overflow: 'hidden', // Crucial para o recorte perfeito
-          cursor: 'pointer' // Mostra a mãozinha de clique
-        }}>
-          
-          {/* A Foto de Perfil de Fundo */}
+        {/* INPUT INVISÍVEL */}
+        <input 
+          type="file" 
+          accept="image/*" 
+          ref={fileInputRef} 
+          style={{ display: 'none' }} 
+          onChange={handleTrocarFoto} 
+        />
+
+        {/* FOTO DE PERFIL (AVATAR) - Adicionado Hover e Click */}
+        <div 
+          className="avatar-hover"
+          onClick={() => fileInputRef.current.click()}
+          style={{...avatarContainer, cursor: 'pointer', position: 'absolute', bottom: '-50px'}}
+        >
           {dadosPerfil.fotoUrl ? (
-            <img src={dadosPerfil.fotoUrl} alt="Foto" style={{
-                width: '100%', height: '100%',
-                objectFit: 'cover', borderRadius: '50%'
-              }} 
-            />
+            <img src={dadosPerfil.fotoUrl} alt="Foto" style={avatarImg} />
           ) : (
-            <div style={{
-              width: '100%', height: '100%',
-              background: '#eee', display: 'flex', 
-              alignItems: 'center', justifyContent: 'center',
-              fontSize: '60px', color: '#888'
-            }}>👤</div>
+            <span style={{ fontSize: '50px' }}>👤</span>
           )}
 
-          {/* --- A CAMADA DE SOBREPOSIÇÃO (OVERLAY) --- */}
-          <div className="avatar-overlay" style={{
-            position: 'absolute', top: 0, left: 0,
-            width: '100%', height: '100%',
-            background: 'rgba(0, 0, 0, 0.7)', // Fundo escuro semitransparente
-            display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center',
-            gap: '8px', padding: '10px',
-            boxSizing: 'border-box',
-            transition: 'opacity 0.3s ease', // Transição suave
-            opacity: 0, // Escondido por padrão !!!
-            borderRadius: '50%'
-          }}>
-            
-            {/* Ícone de Câmera central */}
-            <span style={{ fontSize: '24px', color: 'white' }}>📷</span>
-            
-            {/* Texto principal */}
-            <span style={{ fontSize: '11px', color: 'white', fontWeight: 'bold', textAlign: 'center' }}>
-              {dadosPerfil.fotoUrl ? 'ALTERAR FOTO' : 'SUBIR ARQUIVO'}
-            </span>
-
-            {/* Sub-menu (aparece apenas se já houver foto) */}
-            {dadosPerfil.fotoUrl && (
-              <div style={{ display: 'flex', gap: '5px', marginTop: '5px' }}>
-                <button title="Substituir" style={btnIcone}>🔄</button>
-                <button title="Apagar" style={{...btnIcone, background: '#ff4444'}}>🗑️</button>
-              </div>
-            )}
+          {/* OVERLAY DE AÇÕES */}
+          <div className="overlay-ei" style={overlayStyle}>
+             <span style={{fontSize: '20px'}}>📷</span>
+             <span style={{fontSize: '9px', fontWeight: 'bold'}}>TROCAR</span>
+             {dadosPerfil.fotoUrl && (
+               <button onClick={apagarFoto} style={btnApagar}>🗑️</button>
+             )}
           </div>
         </div>
-        {/* --- FIM DA ÁREA DO AVATAR ITERATIVO --- */}
-
-        {/* Mantenha o botão de Editar no banner */}
-        <button onClick={() => setEditando(!editando)} style={btnEditarStyle}>
-          {editando ? 'Cancelar' : '✏️ Editar Perfil'}
-        </button>
       </div>
 
-      {/* ... Restante do conteúdo (Nome, Bio, Local) abaixo do frame ... */}
-      <div style={{ textAlign: 'center', marginTop: '80px', padding: '0 20px' }}>
-         {/* ... (Mantenha o código de Nome, Local e Bio aqui) */}
+      {/* CONTEÚDO DO PERFIL (EXATAMENTE COMO VOCÊ ENVIOU) */}
+      <div style={{ marginTop: '60px', padding: '0 20px', textAlign: 'center' }}>
+        
+        {editando ? (
+          <div style={formStyle}>
+            <label style={labelStyle}>Nome de Exibição</label>
+            <input 
+              style={inputStyle}
+              value={dadosPerfil.nome}
+              onChange={e => setDadosPerfil({...dadosPerfil, nome: e.target.value})}
+            />
+
+            <label style={labelStyle}>Onde você mora?</label>
+            <input 
+              style={inputStyle}
+              placeholder="Ex: Botucatu, SP"
+              value={dadosPerfil.local}
+              onChange={e => setDadosPerfil({...dadosPerfil, local: e.target.value})}
+            />
+
+            <label style={labelStyle}>Sua Bio ({dadosPerfil.bio.length}/{LIMITE_BIO})</label>
+            <textarea 
+              style={{...inputStyle, height: '80px', resize: 'none'}}
+              maxLength={LIMITE_BIO}
+              value={dadosPerfil.bio}
+              onChange={e => setDadosPerfil({...dadosPerfil, bio: e.target.value})}
+            />
+
+            <button onClick={salvar} disabled={salvando} style={btnSalvar}>
+              {salvando ? 'PROCESSANDO...' : 'SALVAR PERFIL'}
+            </button>
+            <p onClick={() => setEditando(false)} style={btnCancelar}>Cancelar</p>
+          </div>
+        ) : (
+          <div style={{ maxWidth: '500px', margin: '0 auto' }}>
+            <h2 style={{ color: '#111', marginBottom: '5px', fontSize: '28px' }}>{dadosPerfil.nome}</h2>
+            {dadosPerfil.local && <p style={{ color: '#009c3b', fontWeight: '600', marginBottom: '15px' }}>📍 {dadosPerfil.local}</p>}
+            <p style={{ color: '#555', lineHeight: '1.6', fontSize: '16px', marginBottom: '25px' }}>
+              {dadosPerfil.bio}
+            </p>
+            
+            <button onClick={() => setEditando(true)} style={btnEditar}>
+              ✏️ EDITAR PERFIL
+            </button>
+          </div>
+        )}
       </div>
-
-      {/* --- CÓDIGO CSS PARA O EFEITO HOVER --- */}
-      {/* Como você é autodidata, vai gostar de como resolvemos isso no React */}
-      <style>{`
-        /* Quando o mouse passar sobre .avatar-container, 
-           o .avatar-overlay dentro dele aparece */
-        .avatar-container:hover .avatar-overlay {
-          opacity: 1 !important;
-        }
-
-        /* Efeito visual ao passar o mouse sobre os botões de ação */
-        .btn-icone:hover {
-          opacity: 0.8;
-          transform: scale(1.1);
-        }
-      `}</style>
-
     </div>
   )
 }
 
-// Estilos extras para o Overlay e Botões
-const btnIcone = {
-  background: '#ffdf00', color: '#002776', 
-  border: 'none', padding: '5px', 
-  borderRadius: '5px', cursor: 'pointer',
-  fontSize: '12px', className: 'btn-icone',
-  transition: 'all 0.2s'
+// --- ESTILOS (MANTIDOS E ADICIONADOS) ---
+const overlayStyle = {
+  position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+  background: 'rgba(0,0,0,0.5)', color: 'white', display: 'flex', flexDirection: 'column',
+  alignItems: 'center', justifyContent: 'center', opacity: 0, transition: '0.3s'
 }
 
-const btnEditarStyle = {
-  position: 'absolute', right: '20px', bottom: '20px',
-  padding: '10px 20px', borderRadius: '25px', border: 'none',
-  background: '#ffdf00', color: '#002776', fontWeight: 'bold',
-  cursor: 'pointer', fontSize: '14px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+const btnApagar = {
+  background: 'red', border: 'none', borderRadius: '50%', 
+  width: '25px', height: '25px', cursor: 'pointer', marginTop: '5px'
 }
+
+const avatarContainer = {
+  width: '110px', height: '110px',
+  borderRadius: '50%', background: 'white', border: '4px solid white',
+  boxShadow: '0 4px 15px rgba(0,0,0,0.15)', overflow: 'hidden',
+  display: 'flex', alignItems: 'center', justifyContent: 'center'
+}
+
+const avatarImg = { width: '100%', height: '100%', objectFit: 'cover' }
+const formStyle = { display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '400px', margin: '0 auto', textAlign: 'left' }
+const labelStyle = { fontSize: '12px', fontWeight: 'bold', color: '#666', marginLeft: '5px' }
+const inputStyle = { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #ddd', fontSize: '15px', outline: 'none', boxSizing: 'border-box' }
+const btnEditar = { background: '#ffdf00', color: '#002776', border: 'none', padding: '10px 25px', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px' }
+const btnSalvar = { background: '#009c3b', color: 'white', border: 'none', padding: '15px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' }
+const btnCancelar = { color: '#ff4444', cursor: 'pointer', fontSize: '13px', marginTop: '10px', textAlign: 'center', fontWeight: 'bold' }
 
 export default Perfil;
