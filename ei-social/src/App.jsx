@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { auth } from './firebase-config'
 import { onAuthStateChanged, signOut } from 'firebase/auth'
-
-// Importação dos seus Componentes (Mantenha as iniciais maiúsculas aqui)
 import Login from './Login'
 import Cadastro from './Cadastro'
 import Feed from './Feed'
@@ -11,18 +9,39 @@ import Perfil from './Perfil'
 import Comunidades from './Comunidades'
 import Layout from './Layout'
 
-// Componente de Proteção (O "Segurança" das rotas)
+function Spinner() {
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: '#f0f2f5',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexDirection: 'column',
+      gap: '16px'
+    }}>
+      <div style={{
+        width: '44px',
+        height: '44px',
+        borderRadius: '50%',
+        border: '4px solid #ddd',
+        borderTop: '4px solid #009c3b',
+        animation: 'spin 0.8s linear infinite'
+      }} />
+      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+    </div>
+  )
+}
+
 function RotaPrivada({ children, usuario, carregando }) {
-  if (carregando) return null 
-  // Se não estiver logado, manda para a raiz (Login)
-  return usuario ? children : <Navigate to="/" />
+  if (carregando) return <Spinner />
+  return usuario ? children : <Navigate to="/" replace />
 }
 
 function App() {
   const [usuario, setUsuario] = useState(null)
   const [carregando, setCarregando] = useState(true)
 
-  // Vigia o estado do Firebase
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (user) => {
       setUsuario(user)
@@ -32,31 +51,30 @@ function App() {
   }, [])
 
   async function sair() {
-    await signOut(auth)
+    try {
+      await signOut(auth)
+    } catch (e) {
+      console.error('Erro ao sair:', e)
+    }
   }
 
-  // Tela de Carregamento (Logo Pulsando)
-  if (carregando) return (
-    <div className="loading-screen">
-      <img 
-        src="/logo.png" 
-        alt="Ei" 
-        className="pulse-animation" 
-        style={{ width: '150px' }} 
-      />
-    </div>
-  )
+  if (carregando) return <Spinner />
 
   return (
     <Router>
       <Routes>
-        {/* --- ROTAS PÚBLICAS --- */}
-        {/* Se já estiver logado, o "/" manda direto para o "/feed" */}
-        <Route path="/" element={!usuario ? <Login /> : <Navigate to="/feed" />} />
-        
-        <Route path="/cadastro" element={<Cadastro />} />
 
-        {/* --- ROTAS PROTEGIDAS (Onde o Layout aparece) --- */}
+        {/* ROTAS PÚBLICAS */}
+        <Route
+          path="/"
+          element={usuario ? <Navigate to="/feed" replace /> : <Login />}
+        />
+        <Route
+          path="/cadastro"
+          element={usuario ? <Navigate to="/feed" replace /> : <Cadastro />}
+        />
+
+        {/* ROTAS PROTEGIDAS */}
         <Route path="/feed" element={
           <RotaPrivada usuario={usuario} carregando={carregando}>
             <Layout usuario={usuario} onSair={sair}>
@@ -81,8 +99,9 @@ function App() {
           </RotaPrivada>
         } />
 
-        {/* Rota de segurança: se digitar qualquer coisa errada, volta pro início */}
-        <Route path="*" element={<Navigate to="/" />} />
+        {/* ROTA DE SEGURANÇA */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+
       </Routes>
     </Router>
   )
