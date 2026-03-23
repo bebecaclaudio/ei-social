@@ -12,10 +12,7 @@ function Feed({ usuario }) {
   const [focado, setFocado] = useState(false)
   const [eiEnviados, setEiEnviados] = useState([])
   const [toast, setToast] = useState(null)
-
-  // Estados para Edição
-  const [editandoId, setEditandoId] = useState(null)
-  const [textoEditado, setTextoEditado] = useState('')
+  const [postParaExcluir, setPostParaExcluir] = useState(null)
 
   useEffect(() => {
     const q = query(collection(db, "posts"), orderBy("data", "desc"))
@@ -24,6 +21,22 @@ function Feed({ usuario }) {
     })
     return () => unsub()
   }, [])
+
+  // FUNÇÃO DE CURTIR (RESTAURADA)
+  async function curtir(post) {
+    if (!usuario?.uid) return
+    const postRef = doc(db, "posts", post.id)
+    const jaCurtiu = post.curtidores?.includes(usuario.uid)
+    
+    try {
+      await updateDoc(postRef, {
+        curtidas: increment(jaCurtiu ? -1 : 1),
+        curtidores: jaCurtiu ? arrayRemove(usuario.uid) : arrayUnion(usuario.uid)
+      })
+    } catch (e) {
+      console.error("Erro ao curtir:", e)
+    }
+  }
 
   async function publicar() {
     if (novoPost.trim() === '') return
@@ -41,69 +54,61 @@ function Feed({ usuario }) {
     } catch (e) { console.error(e) }
   }
 
-  // --- FUNÇÃO DE SALVAR EDIÇÃO ---
-  async function salvarEdicao(postId) {
-    if (textoEditado.trim() === '') return
+  async function confirmarExclusao() {
+    if (!postParaExcluir) return
     try {
-      const postRef = doc(db, "posts", postId)
-      await updateDoc(postRef, { texto: textoEditado })
-      setEditandoId(null)
-      setToast('Post atualizado!')
+      await deleteDoc(doc(db, "posts", postParaExcluir))
+      setPostParaExcluir(null)
+      setToast('Postagem excluída!')
       setTimeout(() => setToast(null), 2000)
     } catch (e) { console.error(e) }
-  }
-
-  async function excluirPost(postId, autorUid) {
-    if (autorUid !== usuario?.uid) return
-    if (window.confirm("Excluir esta cutucada pra sempre?")) {
-      try {
-        await deleteDoc(doc(db, "posts", postId))
-        setToast('Excluído!')
-        setTimeout(() => setToast(null), 2000)
-      } catch (e) { console.error(e) }
-    }
   }
 
   return (
     <div style={{ minHeight: '100vh', background: '#f0f2f5', paddingBottom: '80px' }}>
       {toast && <div style={toastStyle}>{toast}</div>}
 
+      {/* MODAL DE EXCLUSÃO */}
+      {postParaExcluir && (
+        <div style={overlayStyle}>
+          <div style={modalStyle}>
+            <h3 style={{ color: '#002776', marginBottom: '10px' }}>Excluir Postagem?</h3>
+            <p style={{ color: '#666', marginBottom: '20px' }}>Essa ação não pode ser desfeita.</p>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+              <button onClick={() => setPostParaExcluir(null)} style={btnCancel}>Cancelar</button>
+              <button onClick={confirmarExclusao} style={btnDeleteConfirm}>Excluir</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ maxWidth: '600px', margin: '0 auto', padding: '24px 16px' }}>
-        
-        {/* INPUT DE POSTAGEM */}
         <div style={cardEstilo}>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
             <span style={{ fontSize: '36px' }}>🧑</span>
             <textarea
-              placeholder="No que voce esta pensando?"
+              placeholder="No que você está pensando?"
               value={novoPost}
               onChange={(e) => setNovoPost(e.target.value)}
+              style={{...textareaEstilo, border: focado ? '2px solid #009c3b' : '2px solid #ddd', color: '#333'}}
               onFocus={() => setFocado(true)}
               onBlur={() => setFocado(false)}
-              style={{...textareaEstilo, border: focado ? '2px solid #009c3b' : '2px solid #ddd', color: '#333'}}
             />
           </div>
           <div style={{ display: 'flex', justifyContent: 'end', marginTop: '12px' }}>
-            <button onClick={publicar} style={{
-              ...btnPublicar,
-              background: novoPost.trim() === '' ? '#ccc' : 'linear-gradient(90deg, #002776, #009c3b)',
-            }}>Publicar</button>
+            <button onClick={publicar} style={btnPublicar(novoPost.trim() === '')}>Publicar</button>
           </div>
         </div>
 
-        {/* LISTA DE POSTS */}
         {posts.map((post) => {
           const souEu = post.autorUid === usuario?.uid
-          const isEditando = editandoId === post.id
+          const postCurtidoPorMim = post.curtidores?.includes(usuario?.uid)
 
           return (
             <div key={post.id} style={{...cardEstilo, position: 'relative' }}>
-              
-              {/* BOTÕES DE AÇÃO (LÁPIS E LIXEIRA) */}
-              {souEu && !isEditando && (
+              {souEu && (
                 <div style={{ position: 'absolute', top: '20px', right: '20px', display: 'flex', gap: '10px' }}>
-                  <span title="Editar" onClick={() => { setEditandoId(post.id); setTextoEditado(post.texto); }} style={iconBtn}>✏️</span>
-                  <span title="Excluir" onClick={() => excluirPost(post.id, post.autorUid)} style={iconBtn}>🗑️</span>
+                  <span onClick={() => setPostParaExcluir(post.id)} style={iconBtn}>🗑️</span>
                 </div>
               )}
 
@@ -111,29 +116,26 @@ function Feed({ usuario }) {
                 <span style={{ fontSize: '40px' }}>{post.avatar}</span>
                 <div>
                   <p style={{ fontWeight: 'bold', fontSize: '15px', color: '#222' }}>{post.usuario}</p>
-                  <p style={{ color: '#888', fontSize: '12px' }}>{post.data?.toDate ? post.data.toDate().toLocaleTimeString() : '...'}</p>
+                  <p style={{ color: '#888', fontSize: '12px' }}>
+                    {post.data?.toDate ? post.data.toDate().toLocaleTimeString() : 'agora'}
+                  </p>
                 </div>
               </div>
 
-              {/* CONTEÚDO: TEXTO OU ÁREA DE EDIÇÃO */}
-              {isEditando ? (
-                <div style={{ marginBottom: '15px' }}>
-                  <textarea 
-                    value={textoEditado}
-                    onChange={(e) => setTextoEditado(e.target.value)}
-                    style={{...textareaEstilo, height: '60px', border: '1px solid #009c3b', color: '#333'}}
-                  />
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '8px', justifyContent: 'end' }}>
-                    <button onClick={() => setEditandoId(null)} style={btnCancel}>Cancelar</button>
-                    <button onClick={() => salvarEdicao(post.id)} style={btnSave}>Salvar</button>
-                  </div>
-                </div>
-              ) : (
-                <p style={{ fontSize: '16px', marginBottom: '16px', color: '#333', whiteSpace: 'pre-wrap' }}>{post.texto}</p>
-              )}
+              <p style={{ fontSize: '16px', color: '#333', whiteSpace: 'pre-wrap' }}>{post.texto}</p>
               
               <div style={barraAcoes}>
-                <button style={btnAcao}>❤️ {post.curtidas || 0}</button>
+                {/* BOTÃO DE CURTIR CORRIGIDO */}
+                <button 
+                  onClick={() => curtir(post)} 
+                  style={{
+                    ...btnAcao, 
+                    color: postCurtidoPorMim ? '#e00' : '#555',
+                    background: postCurtidoPorMim ? '#fff0f0' : 'none'
+                  }}
+                >
+                  {postCurtidoPorMim ? '❤️' : '🤍'} {post.curtidas || 0}
+                </button>
                 <button style={btnAcao}>💬 Comentar</button>
               </div>
             </div>
@@ -144,15 +146,17 @@ function Feed({ usuario }) {
   )
 }
 
-// ESTILOS ADICIONAIS
+// ESTILOS
+const overlayStyle = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, backdropFilter: 'blur(4px)' };
+const modalStyle = { background: 'white', padding: '30px', borderRadius: '20px', textAlign: 'center', width: '90%', maxWidth: '320px' };
+const btnDeleteConfirm = { background: '#ff3b30', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' };
+const btnCancel = { background: '#eee', color: '#555', border: 'none', padding: '10px 20px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' };
 const cardEstilo = { background: 'white', borderRadius: '16px', padding: '20px', marginBottom: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' };
 const textareaEstilo = { flex: 1, padding: '12px', borderRadius: '12px', fontSize: '15px', outline: 'none', background: 'white', resize: 'none', width: '100%', boxSizing: 'border-box', border: '1px solid #ddd' };
-const btnPublicar = { padding: '8px 24px', borderRadius: '10px', border: 'none', color: 'white', fontWeight: 'bold', cursor: 'pointer' };
-const barraAcoes = { display: 'flex', gap: '16px', borderTop: '1px solid #eee', paddingTop: '12px' };
-const btnAcao = { border: 'none', background: 'none', cursor: 'pointer', color: '#555', fontWeight: 'bold' };
-const iconBtn = { cursor: 'pointer', opacity: 0.4, transition: '0.2s', fontSize: '16px' };
-const btnSave = { background: '#009c3b', color: 'white', border: 'none', padding: '5px 15px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' };
-const btnCancel = { background: '#eee', color: '#555', border: 'none', padding: '5px 15px', borderRadius: '8px', cursor: 'pointer' };
+const btnPublicar = (vazio) => ({ padding: '8px 24px', borderRadius: '10px', border: 'none', color: 'white', fontWeight: 'bold', cursor: vazio ? 'not-allowed' : 'pointer', background: vazio ? '#ccc' : 'linear-gradient(90deg, #002776, #009c3b)' });
+const barraAcoes = { display: 'flex', gap: '16px', borderTop: '1px solid #eee', paddingTop: '12px', marginTop: '12px' };
+const btnAcao = { border: 'none', background: 'none', cursor: 'pointer', fontWeight: 'bold', padding: '6px 12px', borderRadius: '20px' };
+const iconBtn = { cursor: 'pointer', opacity: 0.5, fontSize: '16px' };
 const toastStyle = { position: 'fixed', top: '80px', left: '50%', transform: 'translateX(-50%)', background: '#002776', color: 'white', padding: '10px 20px', borderRadius: '20px', zIndex: 999 };
 
 export default Feed;
