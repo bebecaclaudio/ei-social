@@ -1,22 +1,24 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import Cropper from 'react-easy-crop'
+import { useState, useEffect } from 'react'
 import { db, storage } from './firebase-config'
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
+import Cropper from 'react-easy-crop'
+import './perfil.css'
 
 function Perfil({ usuario }) {
+
   const [carregando, setCarregando] = useState(true)
   const [editando, setEditando] = useState(false)
   const [salvando, setSalvando] = useState(false)
-  const [abrirOpcoes, setAbrirOpcoes] = useState(false)
 
-  const [imagemOriginal, setImagemOriginal] = useState(null)
+  const [mostrarMenu, setMostrarMenu] = useState(false)
+  const [imagemTemp, setImagemTemp] = useState(null)
+
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null)
-  const [blobFinal, setBlobFinal] = useState(null)
+  const [areaCrop, setAreaCrop] = useState(null)
 
-  const fileInputRef = useRef(null)
+  const LIMITE_BIO = 160
 
   const [dadosPerfil, setDadosPerfil] = useState({
     nome: '',
@@ -25,424 +27,223 @@ function Perfil({ usuario }) {
     fotoUrl: ''
   })
 
-  // 🔄 carregar perfil
+  // ------------------ CARREGAR PERFIL ------------------
   useEffect(() => {
-    let ativo = true
-
-    async function inicializar() {
+    async function inicializarPerfil() {
       if (!usuario?.uid) return
 
       try {
-        const docRef = doc(db, 'usuarios', usuario.uid)
-        const docSnap = await getDoc(docRef)
+        const refDoc = doc(db, 'usuarios', usuario.uid)
+        const snap = await getDoc(refDoc)
 
-        if (!ativo) return
-
-        if (docSnap.exists()) {
-          const d = docSnap.data()
-          setDadosPerfil({
-            nome: d.nome || usuario.displayName || '',
-            bio: d.bio || '',
-            local: d.local || '',
-            fotoUrl: d.fotoUrl || usuario.photoURL || ''
-          })
+        if (snap.exists()) {
+          setDadosPerfil(snap.data())
         } else {
-          const inicial = {
-            nome: usuario.displayName || 'Membro',
-            bio: 'Busco conhecimento e evolução.',
-            local: 'Brasil',
+          const novo = {
+            nome: usuario.displayName || 'Usuário',
+            bio: 'Sou novo por aqui 👋',
+            local: '',
             fotoUrl: usuario.photoURL || '',
             criadoEm: serverTimestamp()
           }
 
-          await setDoc(docRef, inicial)
-          if (ativo) setDadosPerfil(inicial)
+          await setDoc(refDoc, novo)
+          setDadosPerfil(novo)
         }
-      } catch (err) {
-        console.error(err)
+
+      } catch (e) {
+        console.error(e)
       } finally {
-        if (ativo) setCarregando(false)
+        setCarregando(false)
       }
     }
 
-    inicializar()
-    return () => { ativo = false }
+    inicializarPerfil()
   }, [usuario])
 
-  // limpar blob
-  useEffect(() => {
-    return () => {
-      if (dadosPerfil.fotoUrl?.startsWith('blob:')) {
-        URL.revokeObjectURL(dadosPerfil.fotoUrl)
-      }
-    }
-  }, [dadosPerfil.fotoUrl])
-
-  // upload imagem
-  const handleFileChange = (e) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    if (!file.type.startsWith('image/')) {
-      alert('Arquivo inválido')
-      return
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      alert('Máx 5MB')
-      return
-    }
-
-    const reader = new FileReader()
-    reader.readAsDataURL(file)
-    reader.onload = () => {
-      setImagemOriginal(reader.result)
-      setAbrirOpcoes(false)
-    }
-  }
-
-  const aoTerminarRecorte = useCallback((_, pixels) => {
-    setCroppedAreaPixels(pixels)
-  }, [])
-
-  const aplicarRecorte = async () => {
-    if (!croppedAreaPixels) return
-
-    const blob = await processarImagem(imagemOriginal, croppedAreaPixels)
-    if (!blob) return
-
-    const url = URL.createObjectURL(blob)
-
-    setBlobFinal(blob)
-    setDadosPerfil(prev => ({ ...prev, fotoUrl: url }))
-    setImagemOriginal(null)
-  }
-
-  const handleSave = async () => {
-    if (!usuario?.uid) return
-
+  // ------------------ EDITAR PERFIL ------------------
+  async function salvarPerfil() {
     setSalvando(true)
 
     try {
-      let urlFinal = dadosPerfil.fotoUrl
-
-      if (blobFinal) {
-        const storageRef = ref(storage, `perfis/${usuario.uid}/avatar.jpg`)
-        await uploadBytes(storageRef, blobFinal)
-        urlFinal = await getDownloadURL(storageRef)
-      }
-
-      await setDoc(doc(db, 'usuarios', usuario.uid), {
-        nome: dadosPerfil.nome,
-        bio: dadosPerfil.bio,
-        local: dadosPerfil.local,
-        fotoUrl: urlFinal,
-        modificadoEm: serverTimestamp()
-      }, { merge: true })
-
-      setDadosPerfil(prev => ({ ...prev, fotoUrl: urlFinal }))
-      setBlobFinal(null)
+      const refDoc = doc(db, 'usuarios', usuario.uid)
+      await setDoc(refDoc, dadosPerfil, { merge: true })
       setEditando(false)
-
-      alert('Perfil atualizado ✨')
-    } catch (err) {
-      console.error(err)
-      alert('Erro ao salvar')
+    } catch {
+      alert("Erro ao salvar")
     } finally {
       setSalvando(false)
     }
   }
 
-  if (carregando) {
-    return <div style={fullCenterStyle}>Carregando...</div>
+  // ------------------ IMAGEM ------------------
+  function handleSelecionarImagem(e) {
+    const file = e.target.files[0]
+    if (!file) return
+
+    const url = URL.createObjectURL(file)
+    setImagemTemp(url)
   }
 
-  return (
-    <div style={containerStyle}>
-      <style>{`.avatar-wrapper:hover .camera-icon { opacity: 1 !important; }`}</style>
+  async function salvarImagem() {
+    try {
+      const response = await fetch(imagemTemp)
+      const blob = await response.blob()
 
+      const storageRef = ref(storage, `avatars/${usuario.uid}`)
+
+      await uploadBytes(storageRef, blob)
+
+      const url = await getDownloadURL(storageRef)
+
+      const novosDados = { ...dadosPerfil, fotoUrl: url }
+      setDadosPerfil(novosDados)
+
+      await setDoc(doc(db, 'usuarios', usuario.uid), novosDados, { merge: true })
+
+      setImagemTemp(null)
+
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  async function removerFoto() {
+    try {
+      const storageRef = ref(storage, `avatars/${usuario.uid}`)
+      await deleteObject(storageRef)
+
+      const novosDados = { ...dadosPerfil, fotoUrl: '' }
+      setDadosPerfil(novosDados)
+
+      await setDoc(doc(db, 'usuarios', usuario.uid), novosDados, { merge: true })
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  if (carregando) return <div className="loading">Carregando...</div>
+
+  return (
+    <div className="perfil">
+
+      {/* INPUT ESCONDIDO */}
       <input
         type="file"
-        ref={fileInputRef}
-        style={{ display: 'none' }}
         accept="image/*"
-        onChange={handleFileChange}
+        id="uploadFoto"
+        style={{ display: 'none' }}
+        onChange={handleSelecionarImagem}
       />
 
-      {/* MODAL OPÇÕES */}
-      {abrirOpcoes && (
-        <div style={overlayStyle} onClick={() => setAbrirOpcoes(false)}>
-          <div style={modalBoxStyle} onClick={e => e.stopPropagation()}>
-            <button style={btnActionStyle} onClick={() => fileInputRef.current.click()}>
-              Subir foto
-            </button>
+      {/* BANNER */}
+      <div className="banner">
 
-            {dadosPerfil.fotoUrl && (
-              <button
-                style={{ ...btnActionStyle, color: '#ff4444' }}
-                onClick={() => {
-                  setDadosPerfil(p => ({ ...p, fotoUrl: '' }))
-                  setBlobFinal(null)
-                  setAbrirOpcoes(false)
-                }}
-              >
-                Remover
-              </button>
-            )}
-
-            <button style={btnSimpleStyle} onClick={() => setAbrirOpcoes(false)}>
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL CROP */}
-      {imagemOriginal && (
-        <div style={overlayStyle}>
-          <div style={{ ...modalBoxStyle, padding: 0, maxWidth: 400 }}>
-            <div style={{ position: 'relative', height: 300 }}>
-              <Cropper
-                image={imagemOriginal}
-                crop={crop}
-                zoom={zoom}
-                aspect={1}
-                cropShape="round"
-                onCropChange={setCrop}
-                onCropComplete={aoTerminarRecorte}
-                onZoomChange={(z) => setZoom(Number(z))}
-              />
-            </div>
-
-            <div style={{ padding: 20 }}>
-              <input
-                type="range"
-                min={1}
-                max={3}
-                step={0.1}
-                value={zoom}
-                onChange={e => setZoom(Number(e.target.value))}
-                style={{ width: '100%' }}
-              />
-
-              <button style={btnConfirmStyle} onClick={aplicarRecorte}>
-                Confirmar
-              </button>
-
-              <button style={btnSimpleStyle} onClick={() => setImagemOriginal(null)}>
-                Cancelar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* HEADER */}
-      <div style={bannerStyle}>
+        {/* AVATAR */}
         <div
-          className="avatar-wrapper"
-          style={avatarWrapperStyle}
-          onClick={() => setAbrirOpcoes(true)}
+          className="avatar"
+          onMouseEnter={() => setMostrarMenu(true)}
+          onMouseLeave={() => setMostrarMenu(false)}
+          onClick={() => setMostrarMenu(!mostrarMenu)}
         >
           {dadosPerfil.fotoUrl ? (
-            <img src={dadosPerfil.fotoUrl} alt="User" style={imgFitStyle} />
-          ) : (
-            <span style={{ fontSize: 'clamp(28px, 6vw, 40px)' }}>👤</span>
+            <img src={dadosPerfil.fotoUrl} />
+          ) : '👤'}
+
+          {mostrarMenu && (
+            <div className="menu-avatar">
+
+              <button onClick={() =>
+                document.getElementById('uploadFoto').click()
+              }>
+                📤 Enviar foto
+              </button>
+
+              {dadosPerfil.fotoUrl && (
+                <button onClick={removerFoto}>
+                  🗑 Remover
+                </button>
+              )}
+
+            </div>
           )}
-          <div className="camera-icon" style={cameraOverlayStyle}>📷</div>
         </div>
+
       </div>
 
       {/* CONTEÚDO */}
-      <div style={contentBodyStyle}>
+      <div className="conteudo">
+
         {editando ? (
-          <div style={editFormStyle}>
+          <div className="form">
+
             <input
-              style={inputStyle}
               value={dadosPerfil.nome}
-              onChange={e => setDadosPerfil({ ...dadosPerfil, nome: e.target.value })}
+              onChange={e =>
+                setDadosPerfil({ ...dadosPerfil, nome: e.target.value })
+              }
+              placeholder="Nome"
             />
 
             <input
-              style={inputStyle}
               value={dadosPerfil.local}
-              onChange={e => setDadosPerfil({ ...dadosPerfil, local: e.target.value })}
+              onChange={e =>
+                setDadosPerfil({ ...dadosPerfil, local: e.target.value })
+              }
+              placeholder="Cidade"
             />
 
             <textarea
-              style={textareaStyle}
+              maxLength={LIMITE_BIO}
               value={dadosPerfil.bio}
-              onChange={e => setDadosPerfil({ ...dadosPerfil, bio: e.target.value })}
+              onChange={e =>
+                setDadosPerfil({ ...dadosPerfil, bio: e.target.value })
+              }
             />
 
-            <button style={btnConfirmStyle} onClick={handleSave} disabled={salvando}>
+            <button onClick={salvarPerfil}>
               {salvando ? 'Salvando...' : 'Salvar'}
             </button>
+
           </div>
         ) : (
           <>
-            <h1 style={userNameStyle}>{dadosPerfil.nome}</h1>
-            <p style={userLocalStyle}>📍 {dadosPerfil.local}</p>
-            <p style={userBioStyle}>{dadosPerfil.bio}</p>
+            <h1>{dadosPerfil.nome}</h1>
+            {dadosPerfil.local && <p className="local">📍 {dadosPerfil.local}</p>}
+            <p className="bio">{dadosPerfil.bio}</p>
 
-            <button style={btnEditStyle} onClick={() => setEditando(true)}>
+            <button className="editar" onClick={() => setEditando(true)}>
               Editar perfil
             </button>
           </>
         )}
+
       </div>
+
+      {/* MODAL CROP */}
+      {imagemTemp && (
+        <div className="crop-modal">
+
+          <Cropper
+            image={imagemTemp}
+            crop={crop}
+            zoom={zoom}
+            aspect={1}
+            onCropChange={setCrop}
+            onZoomChange={setZoom}
+            onCropComplete={(area, pixels) => setAreaCrop(pixels)}
+          />
+
+          <div className="crop-buttons">
+            <button onClick={salvarImagem}>Salvar</button>
+            <button onClick={() => setImagemTemp(null)}>Cancelar</button>
+          </div>
+
+        </div>
+      )}
+
     </div>
   )
-}
-
-// 🎨 estilos responsivos + contraste
-
-const containerStyle = {
-  minHeight: '100vh',
-  background: '#f7f7f7',
-  padding: '0 16px',
-  fontFamily: 'sans-serif'
-}
-
-const bannerStyle = {
-  height: 'clamp(140px, 25vw, 220px)',
-  background: 'linear-gradient(90deg, #002776, #009c3b)',
-  position: 'relative',
-  display: 'flex',
-  justifyContent: 'center'
-}
-
-const avatarWrapperStyle = {
-  position: 'absolute',
-  bottom: 'clamp(-50px, -8vw, -70px)',
-  width: 'clamp(90px, 25vw, 130px)',
-  height: 'clamp(90px, 25vw, 130px)',
-  borderRadius: '50%',
-  background: '#fff',
-  border: '4px solid #fff',
-  overflow: 'hidden',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center'
-}
-
-const imgFitStyle = { width: '100%', height: '100%', objectFit: 'cover' }
-
-const contentBodyStyle = {
-  marginTop: 'clamp(60px, 12vw, 90px)',
-  textAlign: 'center'
-}
-
-const userNameStyle = {
-  fontSize: 'clamp(22px, 5vw, 32px)',
-  fontWeight: '900',
-  color: '#0a0a0a'
-}
-
-const userLocalStyle = {
-  fontSize: 'clamp(14px, 3.5vw, 18px)',
-  color: '#005c23'
-}
-
-const userBioStyle = {
-  fontSize: 'clamp(14px, 3.8vw, 16px)',
-  color: '#222',
-  maxWidth: '600px',
-  margin: '10px auto'
-}
-
-const btnEditStyle = {
-  padding: '12px 24px',
-  background: '#ffdf00',
-  border: 'none',
-  borderRadius: '30px',
-  cursor: 'pointer'
-}
-
-const overlayStyle = {
-  position: 'fixed',
-  inset: 0,
-  background: 'rgba(0,0,0,0.8)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center'
-}
-
-const modalBoxStyle = {
-  background: '#fff',
-  padding: '20px',
-  borderRadius: '20px'
-}
-
-const btnActionStyle = {
-  width: '100%',
-  padding: '12px',
-  margin: '5px 0'
-}
-
-const btnConfirmStyle = {
-  width: '100%',
-  padding: '12px',
-  background: '#009c3b',
-  color: '#fff',
-  border: 'none',
-  borderRadius: '10px'
-}
-
-const btnSimpleStyle = {
-  background: 'none',
-  border: 'none',
-  marginTop: '10px'
-}
-
-const editFormStyle = {
-  maxWidth: '400px',
-  margin: '0 auto'
-}
-
-const inputStyle = {
-  width: '100%',
-  padding: '10px',
-  marginBottom: '10px'
-}
-
-const textareaStyle = {
-  ...inputStyle,
-  height: '80px'
-}
-
-const fullCenterStyle = {
-  height: '100vh',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center'
-}
-
-// 🖼️ crop
-async function processarImagem(src, crop) {
-  const img = new Image()
-  img.src = src
-
-  await new Promise((res) => (img.onload = res))
-
-  const canvas = document.createElement('canvas')
-  canvas.width = crop.width
-  canvas.height = crop.height
-
-  const ctx = canvas.getContext('2d')
-  ctx.drawImage(
-    img,
-    crop.x,
-    crop.y,
-    crop.width,
-    crop.height,
-    0,
-    0,
-    crop.width,
-    crop.height
-  )
-
-  return new Promise((res) => canvas.toBlob(res, 'image/jpeg', 0.9))
 }
 
 export default Perfil

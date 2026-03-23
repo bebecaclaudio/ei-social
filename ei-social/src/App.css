@@ -49,3 +49,158 @@ body {
   justify-content: center;
   background: linear-gradient(160deg, #002776 0%, #009c3b 50%, #ffdf00 100%);
 }
+
+/* ================= PERFIL ================= */
+
+.perfil {
+  max-width: 700px;
+  margin: 0 auto;
+  background: #161b22;
+  min-height: 100vh;
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+/* BANNER */
+.perfil .banner {
+  height: 180px;
+  background: linear-gradient(135deg, #002776, #009c3b);
+  position: relative;
+}
+
+/* AVATAR */
+.perfil .avatar {
+  position: absolute;
+  bottom: -50px;
+  left: 20px;
+
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+
+  background: #ccc;
+  border: 4px solid #161b22;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  overflow: hidden;
+}
+
+.perfil .avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* MENU DO AVATAR */
+.menu-avatar {
+  position: absolute;
+  bottom: -70px;
+  left: 0;
+
+  background: #0d1117;
+  padding: 10px;
+  border-radius: 10px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+
+  z-index: 100;
+}
+
+.menu-avatar button {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  text-align: left;
+}
+
+/* CONTEÚDO */
+.perfil .conteudo {
+  padding: 80px 20px 20px;
+  color: #e6edf3;
+}
+
+/* TEXTO */
+.perfil h1 {
+  margin: 0;
+  font-size: 24px;
+  color: white;
+}
+
+.perfil .local {
+  color: #58a6ff;
+  margin: 5px 0;
+}
+
+.perfil .bio {
+  margin-top: 10px;
+  color: #c9d1d9;
+  line-height: 1.5;
+}
+
+/* BOTÃO */
+.perfil .editar {
+  margin-top: 15px;
+  padding: 10px 20px;
+  border-radius: 20px;
+  border: none;
+  background: #238636;
+  color: white;
+  cursor: pointer;
+}
+
+/* FORM */
+.perfil .form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.perfil input,
+.perfil textarea {
+  padding: 10px;
+  border-radius: 8px;
+  border: none;
+  background: #0d1117;
+  color: white;
+}
+
+/* CROP MODAL */
+.crop-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.95);
+
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.crop-buttons {
+  margin-top: 20px;
+  display: flex;
+  gap: 10px;
+}
+
+/* RESPONSIVO */
+@media (max-width: 600px) {
+  .perfil {
+    border-radius: 0;
+  }
+
+  .perfil .avatar {
+    width: 90px;
+    height: 90px;
+    bottom: -45px;
+  }
+
+  .perfil .conteudo {
+    padding-top: 70px;
+  }
+}
