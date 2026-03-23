@@ -3,7 +3,6 @@ import { db, storage } from './firebase-config'
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
 import Cropper from 'react-easy-crop'
-import './perfil.css'
 
 function Perfil({ usuario }) {
 
