@@ -1,167 +1,175 @@
 import { useState, useEffect } from 'react'
 import { db } from './firebase-config'
-import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
 
 function Perfil({ usuario }) {
   const [carregando, setCarregando] = useState(true)
   const [editando, setEditando] = useState(false)
+  const [salvando, setSalvando] = useState(false)
   const LIMITE_BIO = 160
 
   const [dadosPerfil, setDadosPerfil] = useState({
-    nome: usuario?.displayName || usuario?.email?.split('@')[0] || 'Usuario',
+    nome: '',
     bio: '',
-    local: ''
+    local: '',
+    fotoUrl: '' // Aqui guardamos o link do Google com segurança
   })
 
+  // --- CARREGAR OU CRIAR PERFIL ---
   useEffect(() => {
-    async function carregarDados() {
+    async function inicializarPerfil() {
       if (!usuario?.uid) return
+      
       try {
         const docRef = doc(db, 'usuarios', usuario.uid)
         const docSnap = await getDoc(docRef)
-        if (docSnap.exists()) setDadosPerfil(docSnap.data())
-      } catch (error) { console.error(error) }
-      setCarregando(false)
+
+        if (docSnap.exists()) {
+          // Se já existe no banco, usamos o que está lá
+          setDadosPerfil(docSnap.data())
+        } else {
+          // Se é a primeira vez, "puxamos" do Google e salvamos no seu banco
+          const novoPerfil = {
+            nome: usuario.displayName || 'Usuário da Ei',
+            bio: 'Sou novo por aqui! 👋',
+            local: '',
+            fotoUrl: usuario.photoURL || '', // O link do Google entra aqui
+            criadoEm: serverTimestamp()
+          }
+          await setDoc(docRef, novoPerfil)
+          setDadosPerfil(novoPerfil)
+        }
+      } catch (error) {
+        console.error("Erro ao carregar perfil:", error)
+      } finally {
+        setCarregando(false)
+      }
     }
-    carregarDados()
+    inicializarPerfil()
   }, [usuario])
 
-  async function salvarAlteracoes() {
-    if (dadosPerfil.bio.length > LIMITE_BIO) {
-      alert('Sua bio está muito longa!')
-      return
-    }
+  // --- SALVAR ALTERAÇÕES ---
+  async function salvar() {
+    setSalvando(true)
     try {
-      await setDoc(doc(db, 'usuarios', usuario.uid), dadosPerfil)
+      const docRef = doc(db, 'usuarios', usuario.uid)
+      await setDoc(docRef, dadosPerfil, { merge: true })
       setEditando(false)
-    } catch (e) { alert('Erro ao salvar') }
+      alert("Perfil atualizado! ✨")
+    } catch (e) {
+      alert("Erro ao salvar. Tente novamente.")
+    } finally {
+      setSalvando(false)
+    }
   }
 
   if (carregando) return (
-    <div style={{ textAlign: 'center', padding: '50px', color: '#333' }}>
-      Carregando...
+    <div style={{ display: 'flex', height: '80vh', alignItems: 'center', justifyContent: 'center', color: '#002776', fontWeight: 'bold' }}>
+      Buscando seus dados...
     </div>
   )
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f0f2f5', paddingBottom: '40px' }}>
-
-      {/* BANNER */}
+    <div style={{ minHeight: '100vh', background: '#f8f9fa' }}>
+      
+      {/* HEADER / BANNER BRASILEIRO */}
       <div style={{
-        height: '200px',
-        background: 'linear-gradient(135deg, #002776, #009c3b, #ffdf00)',
-        position: 'relative'
+        height: '180px',
+        background: 'linear-gradient(135deg, #002776 0%, #009c3b 100%)',
+        position: 'relative',
+        display: 'flex',
+        justifyContent: 'center'
       }}>
-        {/* AVATAR */}
-        <div style={{
-          position: 'absolute', bottom: '-50px', left: '50%',
-          transform: 'translateX(-50%)', width: '100px', height: '100px',
-          borderRadius: '50%', background: 'white', border: '4px solid white',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '60px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
-        }}>
-          {usuario?.photoURL
-            ? <img src={usuario.photoURL} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-            : '👤'
-          }
+        {/* FOTO DE PERFIL (AVATAR) */}
+        <div style={avatarContainer}>
+          {dadosPerfil.fotoUrl ? (
+            <img src={dadosPerfil.fotoUrl} alt="Foto" style={avatarImg} />
+          ) : (
+            <span style={{ fontSize: '50px' }}>👤</span>
+          )}
         </div>
-
-        {/* BOTÃO EDITAR */}
-        <button
-          onClick={() => setEditando(!editando)}
-          style={{
-            position: 'absolute', right: '20px', bottom: '20px',
-            padding: '8px 18px', borderRadius: '20px', border: 'none',
-            background: editando ? '#ff4444' : '#ffdf00',
-            color: editando ? 'white' : '#002776',
-            fontWeight: 'bold', cursor: 'pointer', fontSize: '14px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.2)'
-          }}>
-          {editando ? '❌ Cancelar' : '✏️ Editar Bio'}
-        </button>
       </div>
 
-      <div style={{ textAlign: 'center', marginTop: '60px', padding: '0 16px' }}>
-
-        {/* NOME */}
+      {/* CONTEÚDO DO PERFIL */}
+      <div style={{ marginTop: '60px', padding: '0 20px', textAlign: 'center' }}>
+        
         {editando ? (
-          <input
-            value={dadosPerfil.nome}
-            onChange={(e) => setDadosPerfil({ ...dadosPerfil, nome: e.target.value })}
-            style={{
-              fontSize: '20px', textAlign: 'center', border: '2px solid #009c3b',
-              borderRadius: '8px', padding: '8px', width: '80%',
-              outline: 'none', color: '#111', marginBottom: '12px'
-            }}
-          />
-        ) : (
-          <h2 style={{ fontSize: '24px', fontWeight: '800', color: '#111' }}>
-            {dadosPerfil.nome}
-          </h2>
-        )}
+          <div style={formStyle}>
+            <label style={labelStyle}>Nome de Exibição</label>
+            <input 
+              style={inputStyle}
+              value={dadosPerfil.nome}
+              onChange={e => setDadosPerfil({...dadosPerfil, nome: e.target.value})}
+            />
 
-        {/* LOCAL */}
-        {editando ? (
-          <input
-            value={dadosPerfil.local}
-            placeholder="Sua cidade..."
-            onChange={(e) => setDadosPerfil({ ...dadosPerfil, local: e.target.value })}
-            style={{
-              fontSize: '14px', textAlign: 'center', border: '2px solid #ddd',
-              borderRadius: '8px', padding: '8px', width: '80%',
-              outline: 'none', color: '#111', marginBottom: '12px', display: 'block',
-              margin: '8px auto'
-            }}
-          />
-        ) : (
-          dadosPerfil.local && (
-            <p style={{ color: '#666', fontSize: '14px', marginTop: '4px' }}>
-              📍 {dadosPerfil.local}
-            </p>
-          )
-        )}
+            <label style={labelStyle}>Onde você mora?</label>
+            <input 
+              style={inputStyle}
+              placeholder="Ex: Botucatu, SP"
+              value={dadosPerfil.local}
+              onChange={e => setDadosPerfil({...dadosPerfil, local: e.target.value})}
+            />
 
-        {/* BIO */}
-        {editando ? (
-          <div style={{ maxWidth: '400px', margin: '12px auto' }}>
-            <textarea
+            <label style={labelStyle}>Sua Bio ({dadosPerfil.bio.length}/{LIMITE_BIO})</label>
+            <textarea 
+              style={{...inputStyle, height: '80px', resize: 'none'}}
               maxLength={LIMITE_BIO}
               value={dadosPerfil.bio}
-              onChange={(e) => setDadosPerfil({ ...dadosPerfil, bio: e.target.value })}
-              placeholder="Escreva algo sobre você..."
-              style={{
-                width: '100%', padding: '10px', borderRadius: '8px',
-                border: '2px solid #009c3b', fontSize: '14px',
-                resize: 'none', height: '80px', boxSizing: 'border-box',
-                outline: 'none', color: '#111'
-              }}
+              onChange={e => setDadosPerfil({...dadosPerfil, bio: e.target.value})}
             />
-            <span style={{
-              fontSize: '11px', display: 'block', textAlign: 'right', marginTop: '4px',
-              color: dadosPerfil.bio.length >= LIMITE_BIO ? 'red' : '#888'
-            }}>
-              {dadosPerfil.bio.length} / {LIMITE_BIO}
-            </span>
+
+            <button onClick={salvar} disabled={salvando} style={btnSalvar}>
+              {salvando ? 'PROCESSANDO...' : 'SALVAR PERFIL'}
+            </button>
+            <p onClick={() => setEditando(false)} style={btnCancelar}>Cancelar</p>
           </div>
         ) : (
-          <p style={{ color: '#444', fontSize: '15px', margin: '12px auto', maxWidth: '400px' }}>
-            {dadosPerfil.bio || 'Escreva algo sobre você!'}
-          </p>
-        )}
-
-        {editando && (
-          <button onClick={salvarAlteracoes} style={{
-            background: '#009c3b', color: 'white', border: 'none',
-            padding: '12px 32px', borderRadius: '20px', fontWeight: 'bold',
-            cursor: 'pointer', marginTop: '12px', fontSize: '15px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
-          }}>
-            💾 Salvar
-          </button>
+          <div style={{ maxWidth: '500px', margin: '0 auto' }}>
+            <h2 style={{ color: '#111', marginBottom: '5px', fontSize: '28px' }}>{dadosPerfil.nome}</h2>
+            {dadosPerfil.local && <p style={{ color: '#009c3b', fontWeight: '600', marginBottom: '15px' }}>📍 {dadosPerfil.local}</p>}
+            <p style={{ color: '#555', lineHeight: '1.6', fontSize: '16px', marginBottom: '25px' }}>
+              {dadosPerfil.bio}
+            </p>
+            
+            <button onClick={() => setEditando(true)} style={btnEditar}>
+              ✏️ EDITAR PERFIL
+            </button>
+          </div>
         )}
       </div>
     </div>
   )
 }
 
-export default Perfil
+// --- ESTILOS ---
+const avatarContainer = {
+  position: 'absolute', bottom: '-50px', width: '110px', height: '110px',
+  borderRadius: '50%', background: 'white', border: '4px solid white',
+  boxShadow: '0 4px 15px rgba(0,0,0,0.15)', overflow: 'hidden',
+  display: 'flex', alignItems: 'center', justifyContent: 'center'
+}
+
+const avatarImg = { width: '100%', height: '100%', objectFit: 'cover' }
+
+const formStyle = { display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '400px', margin: '0 auto', textAlign: 'left' }
+
+const labelStyle = { fontSize: '12px', fontWeight: 'bold', color: '#666', marginLeft: '5px' }
+
+const inputStyle = {
+  width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #ddd',
+  fontSize: '15px', outline: 'none', boxSizing: 'border-box'
+}
+
+const btnEditar = {
+  background: '#ffdf00', color: '#002776', border: 'none', padding: '10px 25px',
+  borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px'
+}
+
+const btnSalvar = {
+  background: '#009c3b', color: 'white', border: 'none', padding: '15px',
+  borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px'
+}
+
+const btnCancelar = { color: '#ff4444', cursor: 'pointer', fontSize: '13px', marginTop: '10px', textAlign: 'center', fontWeight: 'bold' }
+
+export default Perfil;
