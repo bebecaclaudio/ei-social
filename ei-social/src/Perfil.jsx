@@ -9,13 +9,13 @@ function Perfil({ usuario }) {
   const LIMITE_BIO = 160
 
   const [dadosPerfil, setDadosPerfil] = useState({
-    nome: usuario?.displayName || usuario?.email?.split('@')[0] || 'Usuario',
+    nome: '',
     bio: '',
     local: ''
   })
 
   // FOTO
-  const [foto, setFoto] = useState(usuario?.photoURL || '')
+  const [foto, setFoto] = useState('')
   const [menuFoto, setMenuFoto] = useState(false)
 
   // CROP
@@ -27,34 +27,55 @@ function Perfil({ usuario }) {
   useEffect(() => {
     async function carregarDados() {
       if (!usuario?.uid) return
+
       try {
         const docRef = doc(db, 'usuarios', usuario.uid)
         const docSnap = await getDoc(docRef)
+
         if (docSnap.exists()) {
           const data = docSnap.data()
-          setDadosPerfil(data)
+
+          setDadosPerfil({
+            nome: data.nome || usuario.displayName || usuario.email?.split('@')[0] || 'Usuario',
+            bio: data.bio || '',
+            local: data.local || ''
+          })
+
           if (data.foto) setFoto(data.foto)
+        } else {
+          setDadosPerfil({
+            nome: usuario.displayName || usuario.email?.split('@')[0] || 'Usuario',
+            bio: '',
+            local: ''
+          })
         }
       } catch (error) {
         console.error(error)
       }
+
       setCarregando(false)
     }
+
     carregarDados()
   }, [usuario])
 
   async function salvarAlteracoes() {
+    if (!usuario?.uid) return
+
     if (dadosPerfil.bio.length > LIMITE_BIO) {
       alert('Sua bio está muito longa!')
       return
     }
+
     try {
       await setDoc(doc(db, 'usuarios', usuario.uid), {
         ...dadosPerfil,
         foto
       })
+
       setEditando(false)
-    } catch {
+    } catch (error) {
+      console.error(error)
       alert('Erro ao salvar')
     }
   }
@@ -99,26 +120,30 @@ function Perfil({ usuario }) {
             {foto ? (
               <img
                 src={foto}
+                alt="Foto de perfil"
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
             ) : '👤'}
 
-            {/* BOTÃO FOTO */}
+            {/* BOTÃO FOTO AJUSTADO */}
             <div
               onClick={() => setMenuFoto(!menuFoto)}
               style={{
                 position: 'absolute',
-                bottom: '0',
-                right: '0',
-                width: '28px',
-                height: '28px',
+                bottom: '6px',
+                right: '6px',
+                width: '34px',
+                height: '34px',
                 borderRadius: '50%',
-                background: '#000000aa',
-                color: 'white',
+                background: '#000',
+                color: '#fff',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                fontSize: '16px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                border: '2px solid white'
               }}
             >
               📷
@@ -248,7 +273,7 @@ function Perfil({ usuario }) {
               aspect={1}
               cropShape="round"
               onCropChange={setCrop}
-              onZoomChange={setZoom}
+              onZoomChange={(z) => setZoom(Number(z))}
             />
           </div>
 
@@ -259,7 +284,7 @@ function Perfil({ usuario }) {
               max={3}
               step={0.1}
               value={zoom}
-              onChange={(e) => setZoom(e.target.value)}
+              onChange={(e) => setZoom(Number(e.target.value))}
             />
 
             <button onClick={() => {
