@@ -5,11 +5,10 @@ import { collection, query, where, onSnapshot } from 'firebase/firestore'
 function NavBar({ telaAtual, onFeed, onComunidades, onPerfil, onNotificacoes, usuarioUid }) {
   const [totalNotificacoes, setTotalNotificacoes] = useState(0)
 
-  // ESCUTAR NOTIFICAÇÕES NÃO LIDAS
+  // ESCUTAR NOTIFICAÇÕES EM TEMPO REAL
   useEffect(() => {
     if (!usuarioUid) return
 
-    // Busca apenas as que são para VOCÊ e que NÃO foram lidas
     const q = query(
       collection(db, "notificacoes"),
       where("paraUid", "==", usuarioUid),
@@ -35,7 +34,8 @@ function NavBar({ telaAtual, onFeed, onComunidades, onPerfil, onNotificacoes, us
       position: 'fixed', bottom: 0, left: 0, right: 0,
       background: 'white', borderTop: '1px solid #eee',
       display: 'flex', justifyContent: 'space-around',
-      alignItems: 'center', padding: '8px 0 12px', z_index: 999,
+      alignItems: 'center', padding: '8px 0 12px', 
+      zIndex: 1000, // Ajustado para garantir que fique no topo
       boxShadow: '0 -4px 20px rgba(0,0,0,0.08)'
     }}>
       {botoes.map(function(botao) {
@@ -51,10 +51,10 @@ function NavBar({ telaAtual, onFeed, onComunidades, onPerfil, onNotificacoes, us
               gap: '4px', border: 'none', background: 'none', cursor: 'pointer',
               padding: '8px 16px', borderRadius: '12px',
               background: ativo ? 'linear-gradient(135deg, #002776, #009c3b)' : 'none',
-              transition: 'all 0.2s', position: 'relative' // Necessário para a bolinha
+              transition: 'all 0.2s', position: 'relative'
             }}>
             
-            {/* BOLINHA VERMELHA (SÓ NO BOTÃO DE NOTIFICAÇÕES) */}
+            {/* BOLINHA DE NOTIFICAÇÃO */}
             {ehNotificacao && totalNotificacoes > 0 && (
               <span style={{
                 position: 'absolute', top: '4px', right: '14px',
