@@ -1,173 +1,295 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import Cropper from 'react-easy-crop' 
+import Cropper from 'react-easy-crop'
 import { db, storage } from './firebase-config'
-import { doc, getDoc, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore'
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 
 function Perfil({ usuario }) {
   const [carregando, setCarregando] = useState(true)
   const [editando, setEditando] = useState(false)
   const [salvando, setSalvando] = useState(false)
-  
-  const [imagemParaCortar, setImagemParaCortar] = useState(null)
+  const [abrirOpcoes, setAbrirOpcoes] = useState(false)
+
+  const [imagemOriginal, setImagemOriginal] = useState(null)
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null)
-  const [arquivoParaUpload, setArquivoParaUpload] = useState(null)
+  const [blobFinal, setBlobFinal] = useState(null)
 
   const fileInputRef = useRef(null)
+
   const [dadosPerfil, setDadosPerfil] = useState({
-    nome: '', bio: '', local: '', fotoUrl: '' 
+    nome: '',
+    bio: '',
+    local: '',
+    fotoUrl: ''
   })
 
+  // 🔄 carregar perfil
   useEffect(() => {
-    async function carregar() {
+    async function inicializar() {
       if (!usuario?.uid) return
+
       try {
-        const docSnap = await getDoc(doc(db, 'usuarios', usuario.uid))
+        const docRef = doc(db, 'usuarios', usuario.uid)
+        const docSnap = await getDoc(docRef)
+
         if (docSnap.exists()) {
-          const data = docSnap.data()
+          const d = docSnap.data()
           setDadosPerfil({
-            nome: data.nome || usuario.displayName || 'Membro Pleiadians',
-            bio: data.bio || '',
-            local: data.local || '',
-            fotoUrl: data.fotoUrl || usuario.photoURL || ''
+            nome: d.nome || usuario.displayName || '',
+            bio: d.bio || '',
+            local: d.local || '',
+            fotoUrl: d.fotoUrl || usuario.photoURL || ''
           })
         } else {
-          const inicial = { 
-            nome: usuario.displayName || 'Novo Membro', 
-            bio: 'Iniciando minha jornada na Pleiadians.', 
-            local: 'Botucatu, SP', 
-            fotoUrl: usuario.photoURL || '' 
+          const inicial = {
+            nome: usuario.displayName || 'Membro Pleiadians',
+            bio: 'Sou polimata e busco conhecimento.',
+            local: 'Brasil',
+            fotoUrl: usuario.photoURL || '',
+            criadoEm: serverTimestamp()
           }
-          await setDoc(doc(db, 'usuarios', usuario.uid), inicial)
+
+          await setDoc(docRef, inicial)
           setDadosPerfil(inicial)
         }
-      } catch (e) { console.error("Erro ao sincronizar:", e) }
-      finally { setCarregando(false) }
+      } catch (err) {
+        console.error(err)
+      } finally {
+        setCarregando(false)
+      }
     }
-    carregar()
+
+    inicializar()
   }, [usuario])
 
-  const selecionarArquivo = (e) => {
-    if (e.target.files[0]) {
-      const reader = new FileReader()
-      reader.onload = () => { setImagemParaCortar(reader.result) }
-      reader.readAsDataURL(e.target.files[0])
+  // 🧹 limpar blob da memória
+  useEffect(() => {
+    return () => {
+      if (dadosPerfil.fotoUrl?.startsWith('blob:')) {
+        URL.revokeObjectURL(dadosPerfil.fotoUrl)
+      }
+    }
+  }, [dadosPerfil.fotoUrl])
+
+  // 📸 upload imagem com validação
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      alert('Escolha uma imagem válida.')
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Imagem muito grande (máx 5MB).')
+      return
+    }
+
+    const reader = new FileReader()
+    reader.readAsDataURL(file)
+    reader.onload = () => {
+      setImagemOriginal(reader.result)
+      setAbrirOpcoes(false)
     }
   }
 
-  const aoCortar = useCallback((_, pixels) => setCroppedAreaPixels(pixels), [])
+  const aoTerminarRecorte = useCallback((_, pixels) => {
+    setCroppedAreaPixels(pixels)
+  }, [])
 
-  const confirmarRecorte = async () => {
-    const blob = await gerarBlob(imagemParaCortar, croppedAreaPixels)
-    setArquivoParaUpload(blob)
-    setDadosPerfil(prev => ({ ...prev, fotoUrl: URL.createObjectURL(blob) }))
-    setImagemParaCortar(null)
+  const aplicarRecorte = async () => {
+    const blob = await processarImagem(imagemOriginal, croppedAreaPixels)
+    if (!blob) return
+
+    setBlobFinal(blob)
+    setDadosPerfil(prev => ({
+      ...prev,
+      fotoUrl: URL.createObjectURL(blob)
+    }))
+    setImagemOriginal(null)
   }
 
-  const salvarGeral = async () => {
+  // 💾 salvar perfil
+  const handleSave = async () => {
+    if (!usuario?.uid) return
+
     setSalvando(true)
-    let urlFinal = dadosPerfil.fotoUrl
+
     try {
-      if (arquivoParaUpload) {
-        const sRef = ref(storage, `perfis/${usuario.uid}/avatar.jpg`)
-        await uploadBytes(sRef, arquivoParaUpload)
-        urlFinal = await getDownloadURL(sRef)
+      let urlDefinitiva = dadosPerfil.fotoUrl
+
+      if (blobFinal) {
+        const storageRef = ref(storage, `perfis/${usuario.uid}/avatar.jpg`)
+        await uploadBytes(storageRef, blobFinal)
+        urlDefinitiva = await getDownloadURL(storageRef)
       }
-      
-      await updateDoc(doc(db, 'usuarios', usuario.uid), { 
-        ...dadosPerfil, 
-        fotoUrl: urlFinal, 
-        modificadoEm: serverTimestamp() 
-      })
+
+      await setDoc(
+        doc(db, 'usuarios', usuario.uid),
+        {
+          ...dadosPerfil,
+          fotoUrl: urlDefinitiva,
+          modificadoEm: serverTimestamp()
+        },
+        { merge: true }
+      )
 
       setEditando(false)
-      setArquivoParaUpload(null)
-      alert("Sincronizado com sucesso! ✨")
-    } catch (e) { alert("Erro ao salvar dados.") }
-    finally { setSalvando(false) }
+      setBlobFinal(null)
+
+      alert('Perfil atualizado ✨')
+    } catch (err) {
+      console.error(err)
+      alert('Erro ao salvar.')
+    } finally {
+      setSalvando(false)
+    }
   }
 
-  if (carregando) return <div style={{textAlign: 'center', padding: '50px'}}>Conectando à rede...</div>
+  if (carregando) {
+    return <div style={fullCenterStyle}>Sincronizando...</div>
+  }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#fff', color: '#1a1a1a' }}>
-      <style>{`.avatar-wrapper:hover .camera-icon { opacity: 1; }`}</style>
+    <div style={containerStyle}>
+      <input
+        type="file"
+        ref={fileInputRef}
+        style={{ display: 'none' }}
+        accept="image/*"
+        onChange={handleFileChange}
+      />
 
-      {/* MODAL DE RECORTE */}
-      {imagemParaCortar && (
-        <div style={overlay}>
-          <div style={modalBox}>
-            <div style={{ position: 'relative', height: '300px', background: '#000' }}>
-              <Cropper image={imagemParaCortar} crop={crop} zoom={zoom} aspect={1} cropShape="round" onCropChange={setCrop} onCropComplete={aoCortar} onZoomChange={setZoom} />
-            </div>
-            <button style={btnSave} onClick={confirmarRecorte}>Confirmar Foto</button>
-            <button style={btnSimple} onClick={() => setImagemParaCortar(null)}>Cancelar</button>
+      {/* AVATAR */}
+      <div style={bannerStyle}>
+        <div
+          onClick={() => setAbrirOpcoes(true)}
+          style={avatarWrapperStyle}
+        >
+          {dadosPerfil.fotoUrl ? (
+            <img src={dadosPerfil.fotoUrl} alt="User" style={imgFitStyle} />
+          ) : (
+            <span>👤</span>
+          )}
+        </div>
+      </div>
+
+      {/* MODAL OPÇÕES */}
+      {abrirOpcoes && (
+        <div style={overlayStyle} onClick={() => setAbrirOpcoes(false)}>
+          <div style={modalBoxStyle} onClick={e => e.stopPropagation()}>
+            <button onClick={() => fileInputRef.current.click()}>
+              Subir Foto
+            </button>
+            <button onClick={() => setAbrirOpcoes(false)}>Cancelar</button>
           </div>
         </div>
       )}
 
-      {/* HEADER E AVATAR */}
-      <div style={banner}>
-        <input type="file" ref={fileInputRef} style={{display: 'none'}} accept="image/*" onChange={selecionarArquivo} />
-        <div className="avatar-wrapper" onClick={() => fileInputRef.current.click()} style={avatarWrapper}>
-          {dadosPerfil.fotoUrl ? <img src={dadosPerfil.fotoUrl} alt="User" style={imgFit} /> : <span style={{fontSize: '40px'}}>👤</span>}
-          <div className="camera-icon" style={cameraOverlay}>📷</div>
-        </div>
-      </div>
-
-      {/* INFORMAÇÕES DO USUÁRIO (COM CORREÇÃO DE CONTRASTE) */}
-      <div style={{ textAlign: 'center', marginTop: '70px', padding: '0 20px' }}>
+      {/* CONTEÚDO */}
+      <div style={contentBodyStyle}>
         {editando ? (
-          <div style={formStyle}>
-            <label style={labelStyle}>NOME</label>
-            <input style={input} value={dadosPerfil.nome} onChange={e => setDadosPerfil({...dadosPerfil, nome: e.target.value})} />
-            <label style={labelStyle}>LOCALIZAÇÃO</label>
-            <input style={input} value={dadosPerfil.local} onChange={e => setDadosPerfil({...dadosPerfil, local: e.target.value})} />
-            <label style={labelStyle}>BIO</label>
-            <textarea style={{...input, height: '80px'}} value={dadosPerfil.bio} onChange={e => setDadosPerfil({...dadosPerfil, bio: e.target.value})} />
-            <button style={btnSave} onClick={salvarGeral} disabled={salvando}>{salvando ? '...' : 'SALVAR'}</button>
-            <button style={btnSimple} onClick={() => setEditando(false)}>Cancelar</button>
-          </div>
+          <>
+            <input
+              value={dadosPerfil.nome}
+              onChange={e =>
+                setDadosPerfil({ ...dadosPerfil, nome: e.target.value })
+              }
+            />
+            <textarea
+              value={dadosPerfil.bio}
+              onChange={e =>
+                setDadosPerfil({ ...dadosPerfil, bio: e.target.value })
+              }
+            />
+            <button onClick={handleSave} disabled={salvando}>
+              {salvando ? 'Salvando...' : 'Salvar'}
+            </button>
+          </>
         ) : (
-          <div style={{maxWidth: '500px', margin: '0 auto'}}>
-            {/* CORREÇÃO AQUI: COR DO NOME ALTERADA PARA PRETO CLARO */}
-            <h1 style={{fontSize: '28px', margin: '0', color: '#1a1a1a'}}>{dadosPerfil.nome}</h1>
-            {/* CORREÇÃO AQUI: COR DA LOCALIZAÇÃO ALTERADA PARA VERDE ESCURO */}
-            <p style={{color: '#00702a', fontWeight: 'bold', margin: '5px 0'}}>📍 {dadosPerfil.local || 'Brasil'}</p>
-            {/* CORREÇÃO AQUI: COR DA BIO ALTERADA PARA CINZA ESCURO */}
-            <p style={{color: '#4a4a4a', lineHeight: '1.6'}}>{dadosPerfil.bio || "Sua biografia aparecerá aqui."}</p>
-            <button style={btnEdit} onClick={() => setEditando(true)}>✏️ CONFIGURAR PERFIL</button>
-          </div>
+          <>
+            <h1>{dadosPerfil.nome}</h1>
+            <p>{dadosPerfil.bio}</p>
+            <button onClick={() => setEditando(true)}>Editar</button>
+          </>
         )}
       </div>
     </div>
   )
 }
 
-// ESTILOS DE SUPORTE
-const banner = { height: '180px', background: 'linear-gradient(90deg, #002776, #009c3b)', position: 'relative', display: 'flex', justifyContent: 'center' };
-const avatarWrapper = { position: 'absolute', bottom: '-55px', width: '115px', height: '115px', borderRadius: '50%', background: '#fff', border: '4px solid #fff', overflow: 'hidden', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' };
-const imgFit = { width: '100%', height: '100%', objectFit: 'cover' };
-const cameraOverlay = { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.3)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: '0.3s' };
-const overlay = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.8)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' };
-const modalBox = { background: '#fff', padding: '20px', borderRadius: '15px', width: '90%', maxWidth: '350px' };
-const btnSave = { width: '100%', padding: '12px', background: '#009c3b', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', marginTop: '10px' };
-const btnEdit = { padding: '10px 25px', background: '#ffdf00', color: '#002776', border: 'none', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer', marginTop: '15px' };
-const btnSimple = { background: 'none', border: 'none', color: '#999', marginTop: '10px', cursor: 'pointer', width: '100%' };
-const formStyle = { maxWidth: '350px', margin: '0 auto', textAlign: 'left' };
-const input = { width: '100%', padding: '10px', marginBottom: '10px', borderRadius: '8px', border: '1px solid #ddd', boxSizing: 'border-box' };
-const labelStyle = { fontSize: '11px', fontWeight: 'bold', color: '#888', marginBottom: '4px', display: 'block' };
-
-async function gerarBlob(src, crop) {
-  const img = new Image(); img.src = src;
-  await new Promise(r => img.onload = r);
-  const canvas = document.createElement('canvas');
-  canvas.width = crop.width; canvas.height = crop.height;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(img, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
-  return new Promise(r => canvas.toBlob(b => r(b), 'image/jpeg'));
+// 🎨 estilos (mantive simples)
+const containerStyle = { minHeight: '100vh' }
+const bannerStyle = { height: '150px', background: '#009c3b' }
+const avatarWrapperStyle = {
+  width: '100px',
+  height: '100px',
+  borderRadius: '50%',
+  overflow: 'hidden',
+  margin: 'auto',
+  cursor: 'pointer'
+}
+const imgFitStyle = { width: '100%', height: '100%', objectFit: 'cover' }
+const contentBodyStyle = { textAlign: 'center', padding: '20px' }
+const overlayStyle = {
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  width: '100%',
+  height: '100%',
+  background: 'rgba(0,0,0,0.7)'
+}
+const modalBoxStyle = {
+  background: '#fff',
+  padding: '20px',
+  margin: '100px auto',
+  width: '200px'
+}
+const fullCenterStyle = {
+  height: '100vh',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center'
 }
 
-export default Perfil;
+// 🖼️ crop imagem
+async function processarImagem(src, crop) {
+  try {
+    const img = new Image()
+    img.src = src
+
+    await new Promise((res, rej) => {
+      img.onload = res
+      img.onerror = rej
+    })
+
+    const canvas = document.createElement('canvas')
+    canvas.width = crop.width
+    canvas.height = crop.height
+
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(
+      img,
+      crop.x,
+      crop.y,
+      crop.width,
+      crop.height,
+      0,
+      0,
+      crop.width,
+      crop.height
+    )
+
+    return await new Promise((res) =>
+      canvas.toBlob(res, 'image/jpeg', 0.9)
+    )
+  } catch (err) {
+    console.error(err)
+    return null
+  }
+}
+
+export default Perfil
