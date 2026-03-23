@@ -2,8 +2,8 @@ import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
+import { getStorage } from "firebase/storage"; // 1. Importação necessária
 
-// Aqui está a "mágica": o código lê o seu arquivo .env de forma segura
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -14,10 +14,10 @@ const firebaseConfig = {
   measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
-// Inicializa o Firebase
 const app = initializeApp(firebaseConfig);
 
-// Exporta as instâncias para usar nos outros arquivos (Cadastro, Feed, etc)
+// Exportações das instâncias
 export const db = getFirestore(app);
 export const auth = getAuth(app);
+export const storage = getStorage(app); // 2. Inicialização do Storage
 export const analytics = getAnalytics(app);
