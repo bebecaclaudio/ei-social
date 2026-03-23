@@ -4,7 +4,6 @@ import { doc, getDoc, setDoc } from 'firebase/firestore'
 
 function Perfil({ usuario }) {
   const [carregando, setCarregando] = useState(true)
-  const [editando, setEditando] = useState(false)
   const [menuFoto, setMenuFoto] = useState(false)
 
   const [dadosPerfil, setDadosPerfil] = useState({
@@ -19,34 +18,27 @@ function Perfil({ usuario }) {
     async function carregarDados() {
       if (!usuario?.uid) return
 
-      try {
-        const docRef = doc(db, 'usuarios', usuario.uid)
-        const docSnap = await getDoc(docRef)
+      const ref = doc(db, 'usuarios', usuario.uid)
+      const snap = await getDoc(ref)
 
-        if (docSnap.exists()) {
-          const data = docSnap.data()
+      if (snap.exists()) {
+        const data = snap.data()
 
-          setDadosPerfil({
-            nome: data.nome || usuario.displayName || usuario.email?.split('@')[0],
-            bio: data.bio || '',
-            local: data.local || ''
-          })
+        setDadosPerfil({
+          nome: data.nome || usuario.displayName || 'Usuário',
+          bio: data.bio || '',
+          local: data.local || ''
+        })
 
-          if (data.foto) setFoto(data.foto)
-          else if (usuario.photoURL) setFoto(usuario.photoURL)
+        setFoto(data.foto || usuario.photoURL || '')
+      } else {
+        setDadosPerfil({
+          nome: usuario.displayName || 'Usuário',
+          bio: '',
+          local: ''
+        })
 
-        } else {
-          setDadosPerfil({
-            nome: usuario.displayName || usuario.email?.split('@')[0],
-            bio: '',
-            local: ''
-          })
-
-          if (usuario.photoURL) setFoto(usuario.photoURL)
-        }
-
-      } catch (e) {
-        console.error(e)
+        setFoto(usuario.photoURL || '')
       }
 
       setCarregando(false)
@@ -56,14 +48,10 @@ function Perfil({ usuario }) {
   }, [usuario])
 
   async function salvar() {
-    if (!usuario?.uid) return
-
     await setDoc(doc(db, 'usuarios', usuario.uid), {
       ...dadosPerfil,
       foto
     })
-
-    setEditando(false)
   }
 
   function uploadFoto(e) {
@@ -85,10 +73,31 @@ function Perfil({ usuario }) {
 
       {/* BANNER */}
       <div style={{
-        height: 200,
+        height: 220,
         background: 'linear-gradient(135deg,#002776,#009c3b,#ffdf00)',
         position: 'relative'
       }}>
+
+        {/* NOME COM CONTRASTE */}
+        <div style={{
+          position: 'absolute',
+          bottom: 20,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(0,0,0,0.45)',
+          padding: '6px 16px',
+          borderRadius: 20,
+          backdropFilter: 'blur(6px)'
+        }}>
+          <h2 style={{
+            color: '#fff',
+            margin: 0,
+            fontWeight: '600',
+            letterSpacing: 0.5
+          }}>
+            {dadosPerfil.nome}
+          </h2>
+        </div>
 
         {/* AVATAR */}
         <div style={{
@@ -105,19 +114,15 @@ function Perfil({ usuario }) {
             overflow: 'hidden',
             position: 'relative',
             border: '4px solid white',
-            background: '#fff',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: 50
+            background: '#fff'
           }}>
 
             {foto
               ? <img src={foto} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : '👤'
+              : <div style={{ fontSize: 50, textAlign: 'center' }}>👤</div>
             }
 
-            {/* OVERLAY BRANCO */}
+            {/* OVERLAY */}
             <div
               className="camera-overlay"
               onClick={() => setMenuFoto(!menuFoto)}
@@ -126,7 +131,6 @@ function Perfil({ usuario }) {
                 inset: 0,
                 borderRadius: '50%',
                 background: 'rgba(255,255,255,0.6)',
-                backdropFilter: 'blur(4px)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -135,7 +139,7 @@ function Perfil({ usuario }) {
                 cursor: 'pointer'
               }}
             >
-              <span style={{ fontSize: 26, color: '#002776' }}>📷</span>
+              <span style={{ fontSize: 26 }}>📷</span>
             </div>
           </div>
 
@@ -154,7 +158,7 @@ function Perfil({ usuario }) {
             }}>
               <label style={{ cursor: 'pointer' }}>
                 📤 Enviar
-                <input type="file" style={{ display: 'none' }} onChange={uploadFoto} />
+                <input type="file" hidden onChange={uploadFoto} />
               </label>
 
               {foto && (
@@ -165,29 +169,10 @@ function Perfil({ usuario }) {
             </div>
           )}
         </div>
-
-        {/* BOTÃO EDITAR */}
-        <button
-          onClick={() => setEditando(!editando)}
-          style={{
-            position: 'absolute',
-            right: 20,
-            bottom: 20,
-            padding: '8px 16px',
-            borderRadius: 20,
-            border: 'none',
-            background: '#ffdf00',
-            fontWeight: 'bold',
-            cursor: 'pointer'
-          }}
-        >
-          ✏️ Editar
-        </button>
       </div>
 
       {/* CONTEÚDO */}
       <div style={{ textAlign: 'center', marginTop: 70 }}>
-        <h2>{dadosPerfil.nome}</h2>
         {dadosPerfil.local && <p>📍 {dadosPerfil.local}</p>}
         <p>{dadosPerfil.bio || 'Sem bio ainda...'}</p>
       </div>
