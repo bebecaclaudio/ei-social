@@ -1,218 +1,138 @@
-import { useState, useEffect, useRef, useCallback } from 'react' // Adicionado useRef e useCallback
-import Cropper from 'react-easy-crop' // Import da biblioteca de recorte
-import { db } from './firebase-config'
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import Cropper from 'react-easy-crop' 
+import { db, storage } from './firebase-config'
+import { doc, getDoc, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 
 function Perfil({ usuario }) {
+  // --- ESTADOS ---
   const [carregando, setCarregando] = useState(true)
   const [editando, setEditando] = useState(false)
   const [salvando, setSalvando] = useState(false)
-  const fileInputRef = useRef(null) // Referência para o seletor de arquivos
-  const LIMITE_BIO = 160
+  const [abrirOpcoes, setAbrirOpcoes] = useState(false)
+  
+  const [imagemParaCortar, setImagemParaCortar] = useState(null)
+  const [crop, setCrop] = useState({ x: 0, y: 0 })
+  const [zoom, setZoom] = useState(1)
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null)
+  const [arquivoParaUpload, setArquivoParaUpload] = useState(null)
 
-  // --- ESTADOS PARA O RECORTE DE IMAGEM ---
-  const [imagemOriginal, setImagemOriginal] = useState(null) // Imagem que o usuário subiu
-  const [crop, setCrop] = useState({ x: 0, y: 0 }) // Posição do recorte
-  const [zoom, setZoom] = useState(1) // Nível de zoom
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null) // Área pixelada final
-
+  const fileInputRef = useRef(null)
   const [dadosPerfil, setDadosPerfil] = useState({
-    nome: '',
-    bio: '',
-    local: '',
-    fotoUrl: '' 
+    nome: '', bio: '', local: '', fotoUrl: '' 
   })
 
+  // --- BUSCAR DADOS (PRESERVANDO O QUE EXISTE) ---
   useEffect(() => {
-    async function inicializarPerfil() {
+    async function carregar() {
       if (!usuario?.uid) return
-      
       try {
-        const docRef = doc(db, 'usuarios', usuario.uid)
-        const docSnap = await getDoc(docRef)
-
+        const docSnap = await getDoc(doc(db, 'usuarios', usuario.uid))
         if (docSnap.exists()) {
           setDadosPerfil(docSnap.data())
         } else {
-          const novoPerfil = {
-            nome: usuario.displayName || 'Usuário da Ei',
-            bio: 'Sou novo por aqui! 👋',
-            local: '',
-            fotoUrl: usuario.photoURL || '', 
-            criadoEm: serverTimestamp()
-          }
-          await setDoc(docRef, novoPerfil)
-          setDadosPerfil(novoPerfil)
+          const inicial = { nome: usuario.displayName || 'Usuário', bio: '', local: '', fotoUrl: usuario.photoURL || '' }
+          await setDoc(doc(db, 'usuarios', usuario.uid), inicial)
+          setDadosPerfil(inicial)
         }
-      } catch (error) {
-        console.error("Erro ao carregar perfil:", error)
-      } finally {
-        setCarregando(false)
-      }
+      } catch (e) { console.error(e) }
+      finally { setCarregando(false) }
     }
-    inicializarPerfil()
+    carregar()
   }, [usuario])
 
-  // --- FUNÇÕES DE INTERAÇÃO COM A FOTO E RECORTE ---
-  
-  // 1. Quando o usuário escolhe a foto
-  const handleTrocarFoto = (e) => {
-    if (e.target.files && e.target.files.length > 0) {
-      const arquivo = e.target.files[0]
+  // --- LÓGICA DE FOTO ---
+  const selecionarArquivo = (e) => {
+    if (e.target.files[0]) {
       const reader = new FileReader()
-      reader.addEventListener('load', () => setImagemOriginal(reader.result)) // Carrega a imagem no Cropper
-      reader.readAsDataURL(arquivo)
+      reader.onload = () => { setImagemParaCortar(reader.result); setAbrirOpcoes(false); }
+      reader.readAsDataURL(e.target.files[0])
     }
   }
 
-  // 2. Quando o usuário termina de mover/zoom a imagem no Cropper
-  const onCropComplete = useCallback((croppedArea, croppedAreaPixels) => {
-    setCroppedAreaPixels(croppedAreaPixels) // Guarda a área final para o recorte
-  }, [])
+  const aoCortar = useCallback((_, pixels) => setCroppedAreaPixels(pixels), [])
 
-  // 3. Quando o usuário clica em "RECORTAR E USAR"
-  const finalizarRecorte = async () => {
-    try {
-      // Cria a imagem final já recortada (como um Blob/Arquivo)
-      const croppedImage = await getCroppedImg(imagemOriginal, croppedAreaPixels)
-      
-      // Cria uma URL temporária para exibir na bolinha
-      const urlTemp = URL.createObjectURL(croppedImage)
-      setDadosPerfil({ ...dadosPerfil, fotoUrl: urlTemp })
-      
-      // Fecha o Cropper
-      setImagemOriginal(null)
-    } catch (e) {
-      console.error(e)
-    }
+  const confirmarRecorte = async () => {
+    const blob = await gerarBlob(imagemParaCortar, croppedAreaPixels)
+    setArquivoParaUpload(blob)
+    setDadosPerfil({ ...dadosPerfil, fotoUrl: URL.createObjectURL(blob) })
+    setImagemParaCortar(null)
   }
 
-  const apagarFoto = (e) => {
-    e.stopPropagation()
-    setDadosPerfil({ ...dadosPerfil, fotoUrl: '' })
-  }
-
-  async function salvar() {
+  // --- SALVAR TUDO ---
+  const salvarGeral = async () => {
     setSalvando(true)
+    let urlFinal = dadosPerfil.fotoUrl
     try {
-      const docRef = doc(db, 'usuarios', usuario.uid)
-      await setDoc(docRef, dadosPerfil, { merge: true })
+      if (arquivoParaUpload) {
+        const sRef = ref(storage, `perfis/${usuario.uid}`)
+        await uploadBytes(sRef, arquivoParaUpload)
+        urlFinal = await getDownloadURL(sRef)
+      }
+      await updateDoc(doc(db, 'usuarios', usuario.uid), { ...dadosPerfil, fotoUrl: urlFinal, modificado em: serverTimestamp() })
       setEditando(false)
-      alert("Perfil atualizado! ✨")
-    } catch (e) {
-      alert("Erro ao salvar. Tente novamente.")
-    } finally {
-      setSalvando(false)
-    }
+      setArquivoParaUpload(null)
+    } catch (e) { alert("Erro ao salvar") }
+    finally { setSalvando(false) }
   }
 
-  if (carregando) return (
-    <div style={{ display: 'flex', height: '80vh', alignItems: 'center', justifyContent: 'center', color: '#002776', fontWeight: 'bold' }}>
-      Buscando seus dados...
-    </div>
-  )
+  if (carregando) return <div style={center}>Carregando Pleiadians...</div>
 
   return (
     <div style={{ minHeight: '100vh', background: '#f8f9fa' }}>
-      
-      {/* CSS PARA O EFEITO DE HOVER NO AVATAR E MODAL DE RECORTE */}
-      <style>{`
-        .avatar-container:hover .overlay-upload { opacity: 1 !important; }
-        .cropper-modal { transition: opacity 0.3s ease; }
-      `}</style>
+      <style>{`.avatar-container:hover .camera-icon { opacity: 1; }`}</style>
 
-      {/* --- MODAL DE RECORTE (JANELA DE AJUSTE) --- */}
-      {imagemOriginal && (
-        <div className="cropper-modal" style={modalCropStyle}>
-          <div style={cropContainerStyle}>
-            <Cropper
-              image={imagemOriginal}
-              crop={crop}
-              zoom={zoom}
-              aspect={1 / 1} // Garante o formato quadrado para a bolinha
-              cropShape="round" // Mostra o frame circular para ajudar o designer
-              onCropChange={setCrop}
-              onCropComplete={onCropComplete}
-              onZoomChange={setZoom}
-            />
+      {/* 1. MODAL DE OPÇÕES DA FOTO */}
+      {abrirOpcoes && (
+        <div style={overlay} onClick={() => setAbrirOpcoes(false)}>
+          <div style={modalBox} onClick={e => e.stopPropagation()}>
+            <button style={btnMenu} onClick={() => fileInputRef.current.click()}>📸 Subir Nova Foto</button>
+            <button style={btnMenu} onClick={() => alert("Em breve: Galeria")}>🖼️ Escolher da Galeria</button>
+            <button style={{...btnMenu, color: 'red'}} onClick={() => {setDadosPerfil({...dadosPerfil, fotoUrl: ''}); setAbrirOpcoes(false)}}>🗑️ Remover Foto</button>
+            <button style={btnSimple} onClick={() => setAbrirOpcoes(false)}>Cancelar</button>
           </div>
-          <div style={cropControlsStyle}>
-            {/* Controle de Zoom */}
-            <input
-              type="range"
-              value={zoom}
-              min={1}
-              max={3}
-              step={0.1}
-              aria-labelledby="Zoom"
-              onChange={(e) => setZoom(e.target.value)}
-              style={zoomInputStyle}
-            />
-            {/* Botões de Ação */}
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button onClick={() => setImagemOriginal(null)} style={btnCancelarCrop}>Cancelar</button>
-              <button onClick={finalizarRecorte} style={btnConfirmarCrop}>Recortar e Usar</button>
+        </div>
+      )}
+
+      {/* 2. MODAL DE RECORTE */}
+      {imagemParaCortar && (
+        <div style={overlay}>
+          <div style={{...modalBox, maxWidth: '400px'}}>
+            <div style={{ position: 'relative', height: '300px', background: '#000' }}>
+              <Cropper image={imagemParaCortar} crop={crop} zoom={zoom} aspect={1} cropShape="round" onCropChange={setCrop} onCropComplete={aoCortar} onZoomChange={setZoom} />
+            </div>
+            <div style={{padding: '15px'}}>
+              <input type="range" min={1} max={3} step={0.1} value={zoom} onChange={e => setZoom(e.target.value)} style={{width: '100%'}}/>
+              <button style={btnSave} onClick={confirmarRecorte}>Cortar e Aplicar</button>
             </div>
           </div>
         </div>
       )}
-      {/* --- FIM DO MODAL DE RECORTE --- */}
 
-      {/* HEADER / BANNER BRASILEIRO (Original) */}
-      <div style={{
-        height: '180px',
-        background: 'linear-gradient(135deg, #002776 0%, #009c3b 100%)',
-        position: 'relative',
-        display: 'flex',
-        justifyContent: 'center'
-      }}>
-        
-        {/* INPUT DE ARQUIVO (INVISÍVEL) */}
-        <input 
-          type="file" 
-          accept="image/*" 
-          ref={fileInputRef} 
-          style={{ display: 'none' }} 
-          onChange={handleTrocarFoto} 
-        />
-
-        {/* FOTO DE PERFIL (AVATAR) COM HOVER E CLICK */}
-        <div 
-          className="avatar-container"
-          onClick={() => fileInputRef.current.click()}
-          style={{ ...avatarContainer, cursor: 'pointer' }}
-        >
-          {dadosPerfil.fotoUrl ? (
-            <img src={dadosPerfil.fotoUrl} alt="Foto" style={avatarImg} />
-          ) : (
-            <span style={{ fontSize: '50px' }}>👤</span>
-          )}
-
-          {/* OVERLAY QUE APARECE AO PASSAR O MOUSE */}
-          <div className="overlay-upload" style={overlayStyle}>
-            <span style={{ fontSize: '20px' }}>📷</span>
-            <span style={{ fontSize: '9px', fontWeight: 'bold' }}>TROCAR / AJUSTAR</span>
-            {dadosPerfil.fotoUrl && (
-              <button onClick={apagarFoto} style={btnApagarPequeno}>🗑️</button>
-            )}
-          </div>
+      {/* HEADER E FOTO */}
+      <div style={banner}>
+        <input type="file" ref={fileInputRef} style={{display: 'none'}} onChange={selecionarArquivo} />
+        <div className="avatar-container" onClick={() => setAbrirOpcoes(true)} style={avatarWrapper}>
+          {dadosPerfil.fotoUrl ? <img src={dadosPerfil.fotoUrl} alt="Avatar" style={img} /> : <span style={{fontSize: '40px'}}>👤</span>}
+          <div className="camera-icon" style={cameraOverlay}>📷</div>
         </div>
       </div>
 
-      {/* CONTEÚDO DO PERFIL - EXATAMENTE COMO ESTAVA ANTES */}
-      <div style={{ marginTop: '60px', padding: '0 20px', textAlign: 'center' }}>
-        {/* ... (Mantenha o código de Nome, Local e Bio aqui) */}
+      {/* CONTEÚDO: NOME, REGIAO, BIO */}
+      <div style={{ textAlign: 'center', marginTop: '60px' }}>
         {editando ? (
-          <div style={formStyle}>
-            {/* ... (Mantenha os inputs de edição) */}
+          <div style={{maxWidth: '350px', margin: '0 auto'}}>
+            <input style={input} value={dadosPerfil.nome} onChange={e => setDadosPerfil({...dadosPerfil, nome: e.target.value})} placeholder="Nome" />
+            <input style={input} value={dadosPerfil.local} onChange={e => setDadosPerfil({...dadosPerfil, local: e.target.value})} placeholder="Localização" />
+            <textarea style={{...input, height: '80px'}} value={dadosPerfil.bio} onChange={e => setDadosPerfil({...dadosPerfil, bio: e.target.value})} placeholder="Bio" />
+            <button style={btnSave} onClick={salvarGeral} disabled={salvando}>{salvando ? 'SALVANDO...' : 'SALVAR'}</button>
           </div>
         ) : (
-          <div style={{ maxWidth: '500px', margin: '0 auto' }}>
-            {/* ... (Mantenha os dados de visualização) */}
-            
-            <button onClick={() => setEditando(true)} style={btnEditar}>
-              ✏️ EDITAR PERFIL
-            </button>
+          <div>
+            <h2 style={{margin: 0}}>{dadosPerfil.nome}</h2>
+            <p style={{color: '#009c3b', fontWeight: 'bold'}}>📍 {dadosPerfil.local || 'Não informado'}</p>
+            <p style={{color: '#666', maxWidth: '400px', margin: '10px auto'}}>{dadosPerfil.bio}</p>
+            <button style={btnEdit} onClick={() => setEditando(true)}>✏️ EDITAR PERFIL</button>
           </div>
         )}
       </div>
@@ -220,95 +140,29 @@ function Perfil({ usuario }) {
   )
 }
 
-// --- FUNÇÃO AUXILIARgetCroppedImg ---
-// Esta função cria a imagem final a partir da área recortada
-async function getCroppedImg(imageSrc, pixelCrop) {
-  const image = new Image()
-  image.src = imageSrc
-  return new Promise((resolve, reject) => {
-    image.onload = () => {
-      const canvas = document.createElement('canvas')
-      canvas.width = pixelCrop.width
-      canvas.height = pixelCrop.height
-      const ctx = canvas.getContext('2d')
-
-      // Recorta e desenha a imagem no canvas
-      ctx.drawImage(
-        image,
-        pixelCrop.x,
-        pixelCrop.y,
-        pixelCrop.width,
-        pixelCrop.height,
-        0,
-        0,
-        pixelCrop.width,
-        pixelCrop.height
-      )
-
-      // Transforma o canvas em um arquivo (Blob)
-      canvas.toBlob((blob) => {
-        if (!blob) {
-          reject(new Error('Canvas is empty'))
-          return
-        }
-        blob.name = 'recortada.jpg'
-        resolve(blob) // Retorna o arquivo final
-      }, 'image/jpeg')
-    }
-    image.onerror = (e) => reject(e)
-  })
+// AUXILIAR CANVAS
+async function gerarBlob(src, crop) {
+  const img = new Image(); img.src = src;
+  await new Promise(r => img.onload = r);
+  const canvas = document.createElement('canvas');
+  canvas.width = crop.width; canvas.height = crop.height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);
+  return new Promise(r => canvas.toBlob(b => r(b), 'image/jpeg'));
 }
 
-// --- ESTILOS ORIGINAIS + NOVOS PARA O RECORTE ---
-const modalCropStyle = {
-  position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
-  background: 'rgba(0,0,0,0.85)', zIndex: 1000,
-  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center'
-}
-
-const cropContainerStyle = { position: 'relative', width: '90%', maxWidth: '400px', height: '400px' }
-
-const cropControlsStyle = {
-  marginTop: '20px', width: '90%', maxWidth: '400px', 
-  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '15px'
-}
-
-const zoomInputStyle = { width: '100%', accentColor: '#ffdf00' }
-
-const btnConfirmarCrop = {
-  background: '#009c3b', color: 'white', border: 'none', 
-  padding: '12px 25px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer'
-}
-
-const btnCancelarCrop = {
-  background: '#444', color: 'white', border: 'none', 
-  padding: '12px 25px', borderRadius: '12px', cursor: 'pointer'
-}
-
-const overlayStyle = {
-  position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-  background: 'rgba(0,0,0,0.5)', color: 'white', display: 'flex', flexDirection: 'column',
-  alignItems: 'center', justifyContent: 'center', opacity: 0, transition: '0.3s'
-}
-
-const btnApagarPequeno = {
-  background: 'red', border: 'none', borderRadius: '50%', width: '26px', height: '26px',
-  cursor: 'pointer', marginTop: '5px', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center'
-}
-
-const avatarContainer = {
-  position: 'absolute', bottom: '-50px', width: '110px', height: '110px',
-  borderRadius: '50%', background: 'white', border: '4px solid white',
-  boxShadow: '0 4px 15px rgba(0,0,0,0.15)', overflow: 'hidden',
-  display: 'flex', alignItems: 'center', justifyContent: 'center'
-}
-
-const avatarImg = { width: '100%', height: '100%', objectFit: 'cover' }
-const formStyle = { display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '400px', margin: '0 auto', textAlign: 'left' }
-const labelStyle = { fontSize: '12px', fontWeight: 'bold', color: '#666', marginLeft: '5px' }
-const inputStyle = { width: '100%', padding: '12px', borderRadius: '10px', border: '1px solid #ddd', fontSize: '15px', outline: 'none', boxSizing: 'border-box' }
-const btnEditar = { background: '#ffdf00', color: '#002776', border: 'none', padding: '10px 25px', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer', fontSize: '14px' }
-const btnSalvar = { background: '#009c3b', color: 'white', border: 'none', padding: '15px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' }
-const btnCancelar = { color: '#ff4444', cursor: 'pointer', fontSize: '13px', marginTop: '10px', textAlign: 'center', fontWeight: 'bold' }
+// ESTILOS
+const banner = { height: '180px', background: 'linear-gradient(90deg, #002776, #009c3b)', position: 'relative', display: 'flex', justifyContent: 'center' };
+const avatarWrapper = { position: 'absolute', bottom: '-50px', width: '110px', height: '110px', borderRadius: '50%', background: '#fff', border: '4px solid #fff', overflow: 'hidden', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' };
+const img = { width: '100%', height: '100%', objectFit: 'cover' };
+const cameraOverlay = { position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.3)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0, transition: '0.3s' };
+const overlay = { position: 'fixed', top: 0, left: 0, width: '100%', height: '100%', background: 'rgba(0,0,0,0.7)', zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' };
+const modalBox = { background: '#fff', padding: '20px', borderRadius: '15px', width: '300px', textAlign: 'center' };
+const btnMenu = { width: '100%', padding: '12px', margin: '5px 0', border: '1px solid #eee', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' };
+const btnSave = { width: '100%', padding: '12px', background: '#009c3b', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold', marginTop: '10px' };
+const btnEdit = { padding: '10px 20px', background: '#ffdf00', border: 'none', borderRadius: '20px', fontWeight: 'bold', cursor: 'pointer' };
+const btnSimple = { background: 'none', border: 'none', color: '#999', marginTop: '10px', cursor: 'pointer' };
+const input = { width: '100%', padding: '10px', marginBottom: '10px', borderRadius: '8px', border: '1px solid #ddd' };
+const center = { display: 'flex', height: '100vh', alignItems: 'center', justifyContent: 'center' };
 
 export default Perfil;
