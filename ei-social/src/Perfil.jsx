@@ -4,7 +4,6 @@ import { doc, getDoc, setDoc } from 'firebase/firestore'
 
 function Perfil({ usuario }) {
   const [carregando, setCarregando] = useState(true)
-  const [menuFoto, setMenuFoto] = useState(false)
 
   const [dadosPerfil, setDadosPerfil] = useState({
     nome: '',
@@ -63,103 +62,46 @@ function Perfil({ usuario }) {
     const reader = new FileReader()
     reader.onload = (ev) => {
       setFoto(ev.target.result)
-      setMenuFoto(false)
     }
     reader.readAsDataURL(file)
   }
 
-  if (carregando) return <div style={{ padding: 40 }}>Carregando...</div>
+  if (carregando) return <div>Carregando...</div>
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
+    <div>
 
       {/* BANNER */}
       <div style={{
         height: 200,
-        background: 'linear-gradient(135deg,#002776,#009c3b,#ffdf00)',
-        position: 'relative'
-      }}>
+        background: 'linear-gradient(135deg,#002776,#009c3b,#ffdf00)'
+      }} />
 
-        {/* AVATAR */}
-        <div style={{
-          position: 'absolute',
-          bottom: -55,
-          left: '50%',
-          transform: 'translateX(-50%)'
-        }}>
-
-          <div className="avatar-hover" style={{
-            width: 110,
-            height: 110,
-            borderRadius: '50%',
-            overflow: 'hidden',
-            position: 'relative',
-            border: '4px solid white',
-            background: '#fff'
-          }}>
-
-            {foto
-              ? <img src={foto} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : <div style={{ fontSize: 50, textAlign: 'center' }}>👤</div>
-            }
-
-            {/* OVERLAY */}
-            <div
-              className="camera-overlay"
-              onClick={() => setMenuFoto(!menuFoto)}
+      {/* FOTO */}
+      <div style={{ marginTop: -50, textAlign: 'center' }}>
+        {foto
+          ? <img
+              src={foto}
               style={{
-                position: 'absolute',
-                inset: 0,
+                width: 100,
+                height: 100,
                 borderRadius: '50%',
-                background: 'rgba(255,255,255,0.6)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                opacity: 0,
-                transition: '0.3s',
-                cursor: 'pointer'
+                objectFit: 'cover'
               }}
-            >
-              <span style={{ fontSize: 26 }}>📷</span>
-            </div>
-          </div>
+            />
+          : <div style={{ fontSize: 50 }}>👤</div>
+        }
 
-          {/* MENU FOTO */}
-          {menuFoto && (
-            <div style={{
-              marginTop: 10,
-              background: '#fff',
-              padding: 10,
-              borderRadius: 10,
-              boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 6,
-              alignItems: 'center'
-            }}>
-              <label style={{ cursor: 'pointer' }}>
-                📤 Enviar
-                <input type="file" hidden onChange={uploadFoto} />
-              </label>
-
-              {foto && (
-                <button onClick={() => setFoto('')}>
-                  ❌ Remover
-                </button>
-              )}
-            </div>
-          )}
+        <div>
+          <input type="file" onChange={uploadFoto} />
         </div>
       </div>
 
       {/* CONTEÚDO */}
-      <div style={{ textAlign: 'center', marginTop: 70 }}>
-        <h2 className="nome-usuario">
-          {dadosPerfil.nome}
-        </h2>
-
-        {dadosPerfil.local && <p>📍 {dadosPerfil.local}</p>}
-        <p>{dadosPerfil.bio || 'Sem bio ainda...'}</p>
+      <div style={{ textAlign: 'center', marginTop: 20 }}>
+        <h2>{dadosPerfil.nome}</h2>
+        {dadosPerfil.local && <p>{dadosPerfil.local}</p>}
+        <p>{dadosPerfil.bio}</p>
       </div>
 
     </div>
