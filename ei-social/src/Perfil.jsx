@@ -48,6 +48,8 @@ function Perfil({ usuario }) {
   }, [usuario])
 
   async function salvar() {
+    if (!usuario?.uid) return
+
     await setDoc(doc(db, 'usuarios', usuario.uid), {
       ...dadosPerfil,
       foto
@@ -73,31 +75,10 @@ function Perfil({ usuario }) {
 
       {/* BANNER */}
       <div style={{
-        height: 220,
+        height: 200,
         background: 'linear-gradient(135deg,#002776,#009c3b,#ffdf00)',
         position: 'relative'
       }}>
-
-        {/* NOME COM CONTRASTE */}
-        <div style={{
-          position: 'absolute',
-          bottom: 20,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          background: 'rgba(0,0,0,0.45)',
-          padding: '6px 16px',
-          borderRadius: 20,
-          backdropFilter: 'blur(6px)'
-        }}>
-          <h2 style={{
-            color: '#fff',
-            margin: 0,
-            fontWeight: '600',
-            letterSpacing: 0.5
-          }}>
-            {dadosPerfil.nome}
-          </h2>
-        </div>
 
         {/* AVATAR */}
         <div style={{
@@ -173,6 +154,10 @@ function Perfil({ usuario }) {
 
       {/* CONTEÚDO */}
       <div style={{ textAlign: 'center', marginTop: 70 }}>
+        <h2 className="nome-usuario">
+          {dadosPerfil.nome}
+        </h2>
+
         {dadosPerfil.local && <p>📍 {dadosPerfil.local}</p>}
         <p>{dadosPerfil.bio || 'Sem bio ainda...'}</p>
       </div>
