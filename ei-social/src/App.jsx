@@ -7,8 +7,8 @@ import Cadastro from './Cadastro'
 import Feed from './Feed'
 import Perfil from './Perfil'
 import Comunidades from './Comunidades'
-import PaginaComunidade from './PaginaComunidade' // Novo componente
-import GerenciarComunidade from './GerenciarComunidade' // Novo componente
+import PaginaComunidade from './PaginaComunidade' 
+import GerenciarComunidade from './GerenciarComunidade' 
 import Layout from './Layout'
 
 function Spinner() {
@@ -91,10 +91,10 @@ function App() {
           </RotaPrivada>
         } />
 
-        {/* --- NOVAS ROTAS DINÂMICAS --- */}
+        {/* --- ROTAS DINÂMICAS CORRIGIDAS (PLURAL) --- */}
         
-        {/* Página Interna da Comunidade (Onde ficam os posts e membros) */}
-        <Route path="/comunidade/:id" element={
+        {/* Agora bate com o navigate("/comunidades/ID") */}
+        <Route path="/comunidades/:id" element={
           <RotaPrivada usuario={usuario} carregando={carregando}>
             <Layout usuario={usuario} onSair={sair}>
               <PaginaComunidade usuario={usuario} />
@@ -102,8 +102,8 @@ function App() {
           </RotaPrivada>
         } />
 
-        {/* Página de Gerenciamento (Restrita ao dono/adm) */}
-        <Route path="/comunidade/:id/gerenciar" element={
+        {/* Gerenciamento também no plural para manter o padrão */}
+        <Route path="/comunidades/:id/gerenciar" element={
           <RotaPrivada usuario={usuario} carregando={carregando}>
             <Layout usuario={usuario} onSair={sair}>
               <GerenciarComunidade usuario={usuario} />
