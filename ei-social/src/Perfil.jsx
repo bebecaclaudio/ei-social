@@ -3,7 +3,7 @@ import { db } from './firebase-config'
 import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore'
 import Cropper from 'react-easy-crop'
 
-// --- FUNÇÃO DE RECORTE ---
+// --- FUNÇÃO DE RECORTE (MANTIDA) ---
 const getCroppedImg = async (imageSrc, crop) => {
   const image = await new Promise((resolve, reject) => {
     const img = new Image();
@@ -111,9 +111,8 @@ function Perfil({ usuario }) {
         const q = query(collection(db, "usuarios"), where("username", "==", dadosPerfil.username));
         const snap = await getDocs(q);
         const jaExiste = snap.docs.some(d => d.id !== usuario.uid);
-        if (jaExiste) return alert("Este @username já existe!");
+        if (jaExiste) return alert("Este @username já está em uso!");
       }
-
       await setDoc(doc(db, 'usuarios', usuario.uid), { ...dadosPerfil, foto }, { merge: true })
       setEditando(false)
       alert("Perfil atualizado!")
@@ -140,6 +139,7 @@ function Perfil({ usuario }) {
         </div>
       )}
 
+      {/* BANNER COM GRADIENTE */}
       <div style={{ height: '180px', background: 'linear-gradient(135deg, #002776, #009c3b, #ffdf00)', position: 'relative' }}>
         <div style={avatarWrapper}>
           <div style={avatarCircle} onMouseEnter={() => setHoverFoto(true)} onMouseLeave={() => setHoverFoto(false)}>
@@ -155,10 +155,15 @@ function Perfil({ usuario }) {
             </div>
           )}
         </div>
-        <button onClick={() => setEditando(!editando)} style={btnEdit}>{editando ? 'Cancelar' : 'Editar Perfil'}</button>
+        
+        {/* BOTÃO COM CONTRASTE AJUSTADO (AZUL ESCURO NO BANNER) */}
+        <button onClick={() => setEditando(!editando)} style={btnEdit}>
+          {editando ? 'Cancelar' : 'Editar Perfil'}
+        </button>
       </div>
 
-      <div style={{ textAlign: 'center', marginTop: '70px', padding: '0 20px' }}>
+      {/* ÁREA DE TEXTO (FUNDO BRANCO) */}
+      <div style={{ textAlign: 'center', marginTop: '80px', padding: '0 20px' }}>
         {editando ? (
           <div style={formStyle}>
             <div style={inputWrapper}>
@@ -166,24 +171,24 @@ function Perfil({ usuario }) {
               <input value={dadosPerfil.username} onChange={e => handleUsernameChange(e.target.value)} style={{ ...inputStyle, paddingLeft: '35px' }} placeholder="username" />
             </div>
             <input value={dadosPerfil.nome} onChange={e => setDadosPerfil({...dadosPerfil, nome: e.target.value})} style={inputStyle} placeholder="Nome" />
-            <input value={dadosPerfil.local} onChange={e => setDadosPerfil({...dadosPerfil, local: e.target.value})} style={inputStyle} placeholder="Local" />
-            <textarea value={dadosPerfil.bio} onChange={e => setDadosPerfil({...dadosPerfil, bio: e.target.value})} style={textareaStyle} placeholder="Bio..." />
-            <button onClick={salvarTexto} style={btnSave}>Salvar</button>
+            <input value={dadosPerfil.local} onChange={e => setDadosPerfil({...dadosPerfil, local: e.target.value})} style={inputStyle} placeholder="Cidade, Estado" />
+            <textarea value={dadosPerfil.bio} onChange={e => setDadosPerfil({...dadosPerfil, bio: e.target.value})} style={textareaStyle} placeholder="Fale sobre você..." />
+            <button onClick={salvarTexto} style={btnSave}>Salvar Alterações</button>
           </div>
         ) : (
-          <>
-            <h2 style={{ fontSize: '32px', margin: '0', fontWeight: 'bold' }}>{dadosPerfil.nome}</h2>
+          <div>
+            <h2 style={{ fontSize: '32px', margin: '0', fontWeight: 'bold', color: '#1a1a1a' }}>{dadosPerfil.nome}</h2>
             <p style={{ color: '#002776', fontWeight: 'bold', fontSize: '18px', margin: '5px 0' }}>@{dadosPerfil.username || 'usuario'}</p>
-            <p style={{ color: '#666', fontSize: '14px' }}>📍 {dadosPerfil.local || 'Botucatu - SP'}</p>
-            <p style={{ maxWidth: '450px', margin: '15px auto', color: '#444', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{dadosPerfil.bio}</p>
-          </>
+            <p style={{ color: '#666', fontSize: '14px', margin: '0' }}>📍 {dadosPerfil.local || 'Botucatu - SP'}</p>
+            <p style={{ maxWidth: '450px', margin: '20px auto', color: '#444', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>{dadosPerfil.bio || 'Bem-vindo ao meu perfil!'}</p>
+          </div>
         )}
       </div>
     </div>
   )
 }
 
-// --- ESTILOS CORRIGIDOS ---
+// --- ESTILOS ---
 const modalOverlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.9)', zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' };
 const cropContainer = { position: 'relative', width: '300px', height: '300px', borderRadius: '10px', overflow: 'hidden' };
 const avatarWrapper = { position: 'absolute', bottom: '-50px', left: '50%', transform: 'translateX(-50%)' };
@@ -191,9 +196,24 @@ const avatarCircle = { width: '120px', height: '120px', borderRadius: '50%', bac
 const cameraOverlay = { position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: '0.2s' };
 const menuDropdown = { position: 'absolute', top: '130px', left: '50%', transform: 'translateX(-50%)', background: 'white', padding: '10px', borderRadius: '10px', boxShadow: '0 5px 15px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '150px' };
 const menuItem = { padding: '8px', textAlign: 'center', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', background: '#f0f0f0', borderRadius: '5px', border: 'none' };
-const btnEdit = { position: 'absolute', right: '20px', bottom: '20px', padding: '8px 16px', borderRadius: '20px', border: 'none', background: 'white', fontWeight: 'bold', cursor: 'pointer' };
 
-// FORMULÁRIO CENTRALIZADO
+// BOTÃO DE EDITAR (AGORA COM CONTRASTE NO BANNER)
+const btnEdit = { 
+  position: 'absolute', 
+  right: '20px', 
+  bottom: '20px', 
+  padding: '10px 20px', 
+  borderRadius: '25px', 
+  border: '1px solid rgba(255,255,255,0.4)', 
+  background: '#002776', 
+  color: '#FFFFFF', 
+  fontWeight: 'bold', 
+  fontSize: '14px',
+  cursor: 'pointer', 
+  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+  transition: '0.2s'
+};
+
 const formStyle = { display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', maxWidth: '300px', margin: '0 auto' };
 const inputWrapper = { position: 'relative', width: '100%' };
 const atSymbol = { position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#888', fontWeight: 'bold' };
