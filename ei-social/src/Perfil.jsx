@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { db } from './firebase-config'
-import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore'
 import Cropper from 'react-easy-crop'
 
-// Função para processar o recorte e devolver a imagem
+// --- SUA FUNÇÃO ORIGINAL DE RECORTE (MANTIDA 100%) ---
 const getCroppedImg = async (imageSrc, crop) => {
   const image = await new Promise((resolve, reject) => {
     const img = new Image();
@@ -49,7 +49,8 @@ function Perfil({ usuario }) {
   const [zoom, setZoom] = useState(1)
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null)
 
-  const [dadosPerfil, setDadosPerfil] = useState({ nome: '', bio: '', local: '' })
+  // ADICIONEI O 'username' AQUI
+  const [dadosPerfil, setDadosPerfil] = useState({ nome: '', bio: '', local: '', username: '' })
   const [foto, setFoto] = useState('')
   const LIMITE_BIO = 160
 
@@ -65,11 +66,12 @@ function Perfil({ usuario }) {
           setDadosPerfil({
             nome: data.nome || usuario.displayName || 'Usuário',
             bio: data.bio || '',
-            local: data.local || ''
+            local: data.local || '',
+            username: data.username || '' // NOVIDADE
           })
           setFoto(data.foto || '')
         } else {
-          setDadosPerfil({ nome: usuario.displayName || 'Usuário', bio: '', local: '' })
+          setDadosPerfil({ nome: usuario.displayName || 'Usuário', bio: '', local: '', username: '' })
           setFoto(usuario.photoURL || '')
         }
       } catch (error) { console.error("Erro ao carregar perfil:", error) }
@@ -88,7 +90,13 @@ function Perfil({ usuario }) {
     reader.readAsDataURL(file)
   }
 
-  // ESTRATÉGIA BASE64: SALVA DIRETO NO BANCO DE DADOS
+  // --- LÓGICA DO USERNAME FORMATADO ---
+  const handleUsernameChange = (val) => {
+    // Remove espaços, coloca em minúsculo e tira caracteres especiais
+    const formatado = val.toLowerCase().replace(/\s/g, '').replace(/[^a-z0-9_.]/g, '');
+    setDadosPerfil({...dadosPerfil, username: formatado});
+  }
+
   async function confirmarCorte() {
     try {
       setSubindoFoto(true)
@@ -98,9 +106,7 @@ function Perfil({ usuario }) {
       reader.readAsDataURL(blob)
       
       reader.onloadend = async () => {
-        const base64data = reader.result // Foto virou texto aqui
-
-        // Atualiza o Firestore (Campo 'foto' recebe o texto da imagem)
+        const base64data = reader.result 
         await setDoc(doc(db, 'usuarios', usuario.uid), { 
           foto: base64data,
           ultimaAtualizacao: new Date() 
@@ -111,7 +117,6 @@ function Perfil({ usuario }) {
       }
     } catch (e) { 
       alert("Erro ao processar imagem.")
-      console.error(e) 
     } finally { 
       setSubindoFoto(false) 
     }
@@ -119,7 +124,17 @@ function Perfil({ usuario }) {
 
   async function salvarTexto() {
     if (dadosPerfil.bio.length > LIMITE_BIO) return alert("Bio muito longa!")
+    if (dadosPerfil.username && dadosPerfil.username.length < 3) return alert("O @username deve ter pelo menos 3 letras.")
+
     try {
+      // VERIFICA SE O @ JÁ EXISTE NO BANCO (EM OUTRO USUÁRIO)
+      if (dadosPerfil.username) {
+        const q = query(collection(db, "usuarios"), where("username", "==", dadosPerfil.username));
+        const querySnapshot = await getDocs(q);
+        const jaExiste = querySnapshot.docs.some(d => d.id !== usuario.uid);
+        if (jaExiste) return alert("Este @username já está sendo usado. Tente outro!");
+      }
+
       await setDoc(doc(db, 'usuarios', usuario.uid), { ...dadosPerfil, foto }, { merge: true })
       setEditando(false)
       alert("Perfil atualizado!")
@@ -150,13 +165,8 @@ function Perfil({ usuario }) {
       )}
 
       <div style={{ height: '180px', background: 'linear-gradient(135deg, #002776, #009c3b, #ffdf00)', position: 'relative' }}>
-        
         <div style={avatarWrapper}>
-          <div 
-            style={avatarCircle}
-            onMouseEnter={() => setHoverFoto(true)}
-            onMouseLeave={() => setHoverFoto(false)}
-          >
+          <div style={avatarCircle} onMouseEnter={() => setHoverFoto(true)} onMouseLeave={() => setHoverFoto(false)}>
             {subindoFoto ? (
                <span style={{ fontSize: '14px', color: '#666' }}>Processando...</span>
             ) : foto ? (
@@ -164,14 +174,7 @@ function Perfil({ usuario }) {
             ) : (
               <span style={{ fontSize: '50px' }}>👤</span>
             )}
-
-            <div
-              onClick={() => setMenuFoto(!menuFoto)}
-              style={{
-                ...cameraOverlay,
-                opacity: (hoverFoto || menuFoto) ? 1 : 0
-              }}
-            >
+            <div onClick={() => setMenuFoto(!menuFoto)} style={{ ...cameraOverlay, opacity: (hoverFoto || menuFoto) ? 1 : 0 }}>
               <span style={{ fontSize: '30px' }}>📷</span>
             </div>
           </div>
@@ -183,16 +186,13 @@ function Perfil({ usuario }) {
                 <input type="file" accept="image/*" onChange={handleFileChange} style={{ display: 'none' }} />
               </label>
               {foto && (
-                <button 
-                  onClick={async () => {
+                <button onClick={async () => {
                     setFoto(''); 
                     await setDoc(doc(db, 'usuarios', usuario.uid), { foto: '' }, { merge: true });
                     setMenuFoto(false);
                   }} 
                   style={{ ...menuItem, color: '#ff4444', border: 'none', background: 'none', width: '100%' }}
-                >
-                  Excluir Foto
-                </button>
+                >Excluir Foto</button>
               )}
               <button onClick={() => setMenuFoto(false)} style={{ ...menuItem, color: '#888', border: 'none', background: 'none' }}>Fechar</button>
             </div>
@@ -207,6 +207,17 @@ function Perfil({ usuario }) {
       <div style={{ textAlign: 'center', marginTop: '70px', padding: '0 20px' }}>
         {editando ? (
           <div style={formStyle}>
+            {/* NOVO CAMPO DE USERNAME */}
+            <div style={{ position: 'relative', width: '300px' }}>
+              <span style={{ position: 'absolute', left: '12px', top: '12px', color: '#888' }}>@</span>
+              <input 
+                value={dadosPerfil.username} 
+                onChange={e => handleUsernameChange(e.target.value)} 
+                style={{ ...inputStyle, paddingLeft: '30px', width: '100%' }} 
+                placeholder="seunome" 
+              />
+            </div>
+            
             <input value={dadosPerfil.nome} onChange={e => setDadosPerfil({...dadosPerfil, nome: e.target.value})} style={inputStyle} placeholder="Nome" />
             <input value={dadosPerfil.local} onChange={e => setDadosPerfil({...dadosPerfil, local: e.target.value})} style={inputStyle} placeholder="Cidade, Estado" />
             <textarea value={dadosPerfil.bio} onChange={e => setDadosPerfil({...dadosPerfil, bio: e.target.value})} style={textareaStyle} placeholder="Bio..." />
@@ -215,6 +226,10 @@ function Perfil({ usuario }) {
         ) : (
           <>
             <h2 style={{ fontSize: '32px', margin: '0 0 5px', color: '#000', fontWeight: 'bold' }}>{dadosPerfil.nome}</h2>
+            {/* EXIBINDO O @ LOGO ABAIXO DO NOME */}
+            <p style={{ color: '#002776', fontWeight: 'bold', fontSize: '18px', margin: '0 0 10px' }}>
+              @{dadosPerfil.username || 'usuario_sem_nome'}
+            </p>
             <p style={{ color: '#666', fontSize: '14px', margin: '0 0 15px' }}>📍 {dadosPerfil.local || 'Explorando o mundo'}</p>
             <p style={{ maxWidth: '450px', margin: '0 auto', color: '#444', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
               {dadosPerfil.bio || 'Bem-vindo ao meu perfil!'}
@@ -226,7 +241,7 @@ function Perfil({ usuario }) {
   )
 }
 
-// ESTILOS (MANTIDOS)
+// --- TODOS OS SEUS ESTILOS ORIGINAIS (MANTIDOS 100%) ---
 const modalOverlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' };
 const cropContainer = { position: 'relative', width: '320px', height: '320px', background: '#333', borderRadius: '12px', overflow: 'hidden' };
 const avatarWrapper = { position: 'absolute', bottom: '-50px', left: '50%', transform: 'translateX(-50%)', zIndex: 10 };
