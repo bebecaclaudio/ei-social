@@ -5,7 +5,7 @@ import { onAuthStateChanged, signOut } from 'firebase/auth'
 import { doc, onSnapshot } from 'firebase/firestore' // Importe o onSnapshot para tempo real
 import Login from './Login'
 import Cadastro from './Cadastro'
-import Feed from './Feed'
+import Feed from './feed'
 import Perfil from './Perfil'
 import Comunidades from './Comunidades'
 import PaginaComunidade from './PaginaComunidade' 

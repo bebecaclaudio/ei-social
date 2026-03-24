@@ -6,7 +6,6 @@ import {
 } from 'firebase/firestore';
 import CardPostComunidade from './CardPostComunidade';
 
-// --- COMPONENTE: AvatarRedondo ---
 function AvatarRedondo({ uid, tamanho = '45px' }) {
   const [foto, setFoto] = useState(null);
   useEffect(() => {
@@ -28,7 +27,6 @@ function PaginaComunidade({ usuario }) {
   const [comu, setComu] = useState(null);
   const [posts, setPosts] = useState([]);
   const [novoPost, setNovoPost] = useState('');
-  const [hashtags, setHashtags] = useState('');
   const [largura, setLargura] = useState(window.innerWidth);
 
   useEffect(() => {
@@ -57,17 +55,11 @@ function PaginaComunidade({ usuario }) {
   async function enviarPost() {
     if (!novoPost.trim() || novoPost.length > 5000 || !usuario) return;
     await addDoc(collection(db, "posts_comunidades"), {
-      comunidadeId: comu.id, texto: novoPost, hashtags: hashtags,
+      comunidadeId: comu.id, texto: novoPost,
       autorUid: usuario.uid, autorNome: usuario.displayName,
       data: serverTimestamp(), curtidas: [], visualizacoes: 0
     });
     setNovoPost('');
-    setHashtags('');
-  }
-
-  function salvarRascunho() {
-    localStorage.setItem(`rascunho_${id}`, JSON.stringify({ novoPost, hashtags }));
-    alert("Rascunho salvo!");
   }
 
   if (!comu) return null;
@@ -76,23 +68,18 @@ function PaginaComunidade({ usuario }) {
   return (
     <div style={{ background: '#f0f2f5', minHeight: '100vh', paddingBottom: '30px' }}>
       
-      {/* BANNER COM RESPIRO E AVATAR NO TOPO ESQUERDO */}
-      {/* BANNER COM RESPIRO E AVATAR NO TOPO ESQUERDO (SEM A COROA!) */}
-    <div style={containerBannerGeral}>
-    <div style={estiloBanner(comu.capaUrl || '#002663')}>
-        {/* Agora o emoji vem direto da sua coleção 'comunidades' */}
-        <div style={avatarTopoEsquerdo}>{comu.emoji || '✨'}</div>
-    </div>
-    </div>
+      <div style={containerBannerGeral}>
+        <div style={estiloBanner(comu.capaUrl || '#002663')}>
+          <div style={avatarTopoEsquerdo}>{comu.emoji || '✨'}</div>
+        </div>
+      </div>
 
       <div style={gridMestre(isMobile)}>
-        
-        {/* SIDEBAR ESQUERDA */}
         <aside style={isMobile ? fullWidth : colLateral}>
           <div style={cardBranco}>
             <h1 style={tituloPretoSidebar}>{comu.nome}</h1>
             <span style={badgeCategoria}>{comu.categoria}</span>
-            <p style={textoDesc}>{comu.descricao || "Bem-vinda à nossa egrégora."}</p>
+            <p style={textoDesc}>{comu.descricao}</p>
             {souDono && (
               <button onClick={() => navigate(`/comunidades/${id}/gerenciar`)} style={btnGerenciarAmarelo}>
                 ⚙️ Gerenciar Informações
@@ -101,7 +88,6 @@ function PaginaComunidade({ usuario }) {
           </div>
         </aside>
 
-        {/* FEED CENTRAL */}
         <main style={colCentro(isMobile)}>
           <div style={cardPostar}>
             <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
@@ -114,21 +100,13 @@ function PaginaComunidade({ usuario }) {
                   style={inputAreaAjustado}
                   maxLength={5000}
                 />
-                <input 
-                  type="text" 
-                  placeholder="#hashtags" 
-                  value={hashtags}
-                  onChange={e => setHashtags(e.target.value)}
-                  style={inputHashtags}
-                />
               </div>
             </div>
             
-            {/* RODAPÉ DO POST: CONTADOR E RASCUNHO À ESQUERDA, POSTAR À DIREITA */}
             <div style={botoesAcaoPost}>
               <div style={grupoEsquerdaAcao}>
-                <span style={contadorChars}>{novoPost.length}/5000</span>
-                <button onClick={salvarRascunho} style={btnRascunho}>Salvar rascunho</button>
+                <span style={textosEscuros}>{novoPost.length}/5000</span>
+                <button onClick={() => alert("Salvo!")} style={btnRascunho}>Salvar rascunho</button>
               </div>
               <button onClick={enviarPost} style={btnPostVerde}>Postar</button>
             </div>
@@ -137,7 +115,6 @@ function PaginaComunidade({ usuario }) {
           {posts.map(p => <CardPostComunidade key={p.id} p={p} usuario={usuario} slugComu={id} />)}
         </main>
 
-        {/* SIDEBAR DIREITA (OCULTA NO MOBILE) */}
         {!isMobile && (
           <aside style={colLateral}>
             <div style={cardBranco}>
@@ -167,14 +144,27 @@ const tituloPretoSidebar = { fontSize: '24px', fontWeight: '900', color: '#000',
 const badgeCategoria = { color: '#5865f2', fontSize: '13px', fontWeight: 'bold' };
 const textoDesc = { fontSize: '14px', color: '#555', marginTop: '10px' };
 const cardPostar = { background: 'white', padding: '18px', borderRadius: '22px', border: '1px solid #e1e8ed', marginBottom: '20px' };
-const inputAreaAjustado = { width: '100%', boxSizing: 'border-box', border: 'none', background: '#f8f9fa', borderRadius: '12px', minHeight: '90px', padding: '15px', outline: 'none', resize: 'none', fontSize: '16px' };
-const inputHashtags = { width: '100%', border: 'none', background: 'none', padding: '5px 0', fontSize: '14px', color: '#5865f2', outline: 'none', marginTop: '8px' };
+
+const inputAreaAjustado = { 
+  width: '100%', 
+  boxSizing: 'border-box', 
+  border: 'none', 
+  background: '#f8f9fa', 
+  borderRadius: '12px', 
+  minHeight: '90px', 
+  padding: '15px', 
+  outline: 'none', 
+  resize: 'none', 
+  fontSize: '16px', 
+  color: '#1a1a1a' // Texto Escuro no TextArea
+};
+
 const botoesAcaoPost = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px' };
 const grupoEsquerdaAcao = { display: 'flex', alignItems: 'center', gap: '15px' };
-const btnRascunho = { background: 'none', border: 'none', color: '#888', cursor: 'pointer', fontSize: '12px', textDecoration: 'underline' };
+const textosEscuros = { fontSize: '11px', color: '#444', fontWeight: 'bold' };
+const btnRascunho = { background: 'none', border: 'none', color: '#444', cursor: 'pointer', fontSize: '12px', textDecoration: 'underline' };
 const btnPostVerde = { background: '#00a859', color: 'white', border: 'none', padding: '10px 30px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' };
-const btnGerenciarAmarelo = { width: '100%', padding: '12px', background: '#FFD700', border: 'none', borderRadius: '12px', fontWeight: 'bold', marginTop: '20px', color: '#000', cursor: 'pointer' };
-const contadorChars = { fontSize: '11px', color: '#bbb', fontWeight: 'bold' };
+const btnGerenciarAmarelo = { width: '100%', padding: '12px', background: '#FFD700', border: 'none', borderRadius: '12px', fontWeight: 'bold', marginTop: '20px', color: '#000' };
 const subTitulo = { fontSize: '11px', color: '#aaa', fontWeight: '900', textAlign: 'center' };
 const gridMembros = { display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '15px' };
 const btnMais = { width: '40px', height: '40px', borderRadius: '50%', border: 'none', background: '#eee' };
