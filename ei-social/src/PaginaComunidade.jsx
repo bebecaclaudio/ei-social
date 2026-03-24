@@ -5,7 +5,7 @@ import {
   collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc 
 } from 'firebase/firestore';
 
-// Componente de Avatar que você validou
+// Componente de Avatar que recupera a foto real do usuário no banco
 function AvatarAutor({ uid, fallbackEmoji, tamanho = '45px' }) {
   const [fotoUrl, setFotoUrl] = useState(null);
   useEffect(() => {
@@ -70,35 +70,45 @@ function PaginaComunidade({ usuario }) {
   async function enviarPost() {
     if (!novoPost.trim() || !usuario) return;
     await addDoc(collection(db, "posts_comunidades"), {
-      comunidadeId: comu.id, texto: novoPost, autorUid: usuario.uid,
-      autorNome: usuario.displayName, data: serverTimestamp(),
-      curtidas: [], visualizacoes: 0
+      comunidadeId: comu.id,
+      texto: novoPost,
+      autorUid: usuario.uid,
+      autorNome: usuario.displayName,
+      data: serverTimestamp(),
+      curtidas: [],
+      visualizacoes: 0
     });
     setNovoPost('');
   }
 
-  if (!comu) return <div style={{textAlign:'center', padding:'50px'}}>Carregando...</div>;
+  if (!comu) return <div style={{textAlign:'center', padding:'50px', fontWeight:'bold'}}>Carregando...</div>;
 
   return (
-    <div style={{ background: '#f0f2f5', minHeight: '100vh' }}>
+    <div style={{ background: '#f0f2f5', minHeight: '100vh', paddingBottom: '50px' }}>
       
-      {/* BANNER RESPONSIVO COM MARGENS ✅ */}
-      <div style={containerGeral}>
+      {/* HEADER / BANNER */}
+      <div style={containerBanner}>
         <div style={bannerEstilo(comu.capaUrl || '#002776')}>
           <div style={avatarFlutuante}>
             {comu.emoji || '✨'}
           </div>
         </div>
+
+        {/* TITULO E INFO (Ajustado para leitura) */}
+        <div style={isMobile ? infoMobile : infoDesktop}>
+          <h1 style={tituloEstilo}>{comu.nome}</h1>
+          <span style={badgeEstilo}>{comu.categoria}</span>
+        </div>
       </div>
 
+      {/* CONTEÚDO PRINCIPAL */}
       <div style={isMobile ? layoutMobile : layoutDesktop}>
         
-        {/* COLUNA ESQUERDA */}
+        {/* COLUNA ESQUERDA (INFO) */}
         {!isMobile && (
           <aside style={{ flex: '0 0 300px' }}>
             <div style={cardBranco}>
-              <h2 style={titulo}>{comu.nome}</h2>
-              <span style={badge}>{comu.categoria}</span>
+              <p style={textoDesc}>Página oficial da comunidade {comu.nome}.</p>
               <button onClick={() => navigate(`/comunidades/${id}/gerenciar`)} style={btnAmarelo}>
                 ⚙️ Gerenciar
               </button>
@@ -107,7 +117,7 @@ function PaginaComunidade({ usuario }) {
         )}
 
         {/* COLUNA CENTRAL (FEED) */}
-        <main style={{ flex: 1, maxWidth: isMobile ? '100%' : '600px' }}>
+        <main style={{ flex: 1, maxWidth: isMobile ? '100%' : '650px' }}>
           <div style={cardBranco}>
             <div style={{ display: 'flex', gap: '12px' }}>
               <AvatarAutor uid={usuario?.uid} tamanho="45px" />
@@ -128,15 +138,15 @@ function PaginaComunidade({ usuario }) {
           ))}
         </main>
 
-        {/* COLUNA DIREITA */}
+        {/* COLUNA DIREITA (MEMBROS) */}
         {!isMobile && (
           <aside style={{ flex: '0 0 280px' }}>
             <div style={cardBranco}>
-              <h4 style={subtitulo}>Membros</h4>
+              <h4 style={labelMembros}>Membros</h4>
               <div style={gridMembros}>
                 <AvatarAutor uid={usuario?.uid} tamanho="40px" />
               </div>
-              <button style={btnTexto}>Ver todos</button>
+              <button style={btnLink}>Ver todos</button>
             </div>
           </aside>
         )}
@@ -145,37 +155,47 @@ function PaginaComunidade({ usuario }) {
   );
 }
 
-// --- ESTILOS NEUTROS E RESPONSIVOS ---
-const containerGeral = { maxWidth: '1280px', margin: '0 auto', padding: '0 15px' };
+// --- ESTILOS (RESPONSIVOS E NEUTROS) ---
+
+const containerBanner = { maxWidth: '1280px', margin: '0 auto', padding: '0 15px', position: 'relative' };
 
 const bannerEstilo = (bg) => ({
-  height: '250px',
+  height: '240px',
   background: bg.startsWith('http') ? `url(${bg}) center/cover` : bg,
   position: 'relative',
-  borderRadius: '0 0 20px 20px',
-  marginTop: '10px'
+  borderRadius: '0 0 25px 25px',
+  marginTop: '10px',
+  boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
 });
 
 const avatarFlutuante = {
-  width: '100px', height: '100px', background: 'white', borderRadius: '25px',
-  position: 'absolute', bottom: '-50px', left: '50px',
+  width: '110px', height: '110px', background: 'white', borderRadius: '25px',
+  position: 'absolute', bottom: '-55px', left: '40px',
   display: 'flex', alignItems: 'center', justifyContent: 'center',
-  fontSize: '50px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+  fontSize: '55px', boxShadow: '0 8px 20px rgba(0,0,0,0.15)', zIndex: 5,
+  border: '4px solid white'
 };
 
-const layoutDesktop = { display: 'flex', justifyContent: 'center', margin: '70px auto 0', gap: '20px', maxWidth: '1280px', padding: '0 15px' };
-const layoutMobile = { display: 'flex', flexDirection: 'column', padding: '70px 15px 20px', gap: '15px' };
+// POSICIONAMENTO DO TITULO
+const infoDesktop = { padding: '20px 0 0 170px', minHeight: '80px' };
+const infoMobile = { padding: '70px 0 0 0', textAlign: 'center' };
 
-const cardBranco = { background: 'white', padding: '20px', borderRadius: '20px', marginBottom: '15px', border: '1px solid #ddd' };
-const titulo = { fontSize: '20px', fontWeight: 'bold', margin: '10px 0' };
-const badge = { background: '#eee', padding: '4px 10px', borderRadius: '10px', fontSize: '12px' };
-const subtitulo = { color: '#888', fontSize: '14px', marginBottom: '10px' };
+const tituloEstilo = { fontSize: '28px', fontWeight: '900', color: '#1a1a1a', margin: '0 0 5px 0' };
+const badgeEstilo = { background: '#eef2ff', color: '#5865f2', padding: '4px 12px', borderRadius: '15px', fontSize: '12px', fontWeight: 'bold' };
 
-const inputTextArea = { width: '100%', border: '1px solid #eee', borderRadius: '10px', padding: '10px', outline: 'none', resize: 'none', minHeight: '60px', background: '#fff' };
-const btnVerde = { background: '#00a859', color: 'white', border: 'none', padding: '8px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' };
-const btnAmarelo = { width: '100%', padding: '10px', background: '#FFD700', border: 'none', borderRadius: '10px', fontWeight: 'bold', marginTop: '15px', cursor: 'pointer' };
+const layoutDesktop = { display: 'flex', justifyContent: 'center', marginTop: '40px', gap: '25px', maxWidth: '1280px', padding: '0 15px' };
+const layoutMobile = { display: 'flex', flexDirection: 'column', padding: '20px 15px', gap: '15px' };
 
-const gridMembros = { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' };
-const btnTexto = { background: 'none', border: 'none', color: '#002776', fontWeight: 'bold', marginTop: '10px', cursor: 'pointer' };
+const cardBranco = { background: 'white', padding: '20px', borderRadius: '20px', border: '1px solid #ddd', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', marginBottom: '15px' };
+const textoDesc = { color: '#555', fontSize: '14px', lineHeight: '1.5' };
+
+const inputTextArea = { width: '100%', border: '1px solid #eee', borderRadius: '10px', padding: '12px', outline: 'none', resize: 'none', minHeight: '70px', background: '#fff', fontSize: '16px', color: '#1a1a1a' };
+
+const btnVerde = { background: '#00a859', color: 'white', border: 'none', padding: '10px 25px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' };
+const btnAmarelo = { width: '100%', padding: '12px', background: '#FFD700', border: 'none', borderRadius: '12px', fontWeight: '900', marginTop: '15px', cursor: 'pointer' };
+
+const gridMembros = { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginTop: '15px' };
+const labelMembros = { color: '#888', fontSize: '13px', textTransform: 'uppercase', fontWeight: 'bold' };
+const btnLink = { background: 'none', border: 'none', color: '#002776', fontWeight: 'bold', marginTop: '15px', cursor: 'pointer', fontSize: '14px' };
 
 export default PaginaComunidade;
