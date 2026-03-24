@@ -6,7 +6,7 @@ import {
   deleteDoc, getDoc 
 } from 'firebase/firestore'
 
-// --- COMPONENTE: BUSCA FOTO NO BANCO OU USA GOOGLE (SEM MOSTRAR TEXTO) ---
+// --- COMPONENTE AVATAR ---
 function AvatarAutor({ uid, fallbackEmoji, tamanho = '40px' }) {
   const [fotoUrl, setFotoUrl] = useState(null)
 
@@ -21,7 +21,6 @@ function AvatarAutor({ uid, fallbackEmoji, tamanho = '40px' }) {
     carregarFoto()
   }, [uid])
 
-  // Checa se é um link (Google ou Base64) para não renderizar como texto
   const ehLink = (str) => typeof str === 'string' && (str.startsWith('http') || str.startsWith('data:image'));
   const imagemParaExibir = fotoUrl || (ehLink(fallbackEmoji) ? fallbackEmoji : null);
 
@@ -32,11 +31,7 @@ function AvatarAutor({ uid, fallbackEmoji, tamanho = '40px' }) {
       alignItems: 'center', justifyContent: 'center', border: '1px solid #ddd'
     }}>
       {imagemParaExibir ? (
-        <img 
-          src={imagemParaExibir} 
-          alt="" 
-          style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-        />
+        <img src={imagemParaExibir} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
       ) : (
         <span style={{ fontSize: parseInt(tamanho) * 0.6 + 'px' }}>
           {fallbackEmoji && !ehLink(fallbackEmoji) ? fallbackEmoji : '👤'}
@@ -56,7 +51,6 @@ function Feed({ usuario }) {
   const [textoEditado, setTextoEditado] = useState('')
   const [minhaFotoAtual, setMinhaFotoAtual] = useState('')
 
-  // Monitora sua própria foto para a área de postagem
   useEffect(() => {
     if (!usuario?.uid) return
     const unsub = onSnapshot(doc(db, "usuarios", usuario.uid), (docSnap) => {
@@ -65,7 +59,6 @@ function Feed({ usuario }) {
     return () => unsub()
   }, [usuario])
 
-  // Carrega os posts
   useEffect(() => {
     const q = query(collection(db, "posts"), orderBy("data", "desc"))
     const unsub = onSnapshot(q, (snapshot) => {
@@ -153,13 +146,18 @@ function Feed({ usuario }) {
                     <img src={minhaFotoAtual || usuario?.photoURL} style={{width: '100%', height: '100%', objectFit: 'cover'}} alt="" />
                 ) : <span style={{fontSize: '36px'}}>🧑</span>}
             </div>
+            {/* O TEXTAREA AGORA TEM CONTRASTE GARANTIDO */}
             <textarea
               placeholder="No que você está pensando?"
               value={novoPost}
               onChange={(e) => setNovoPost(e.target.value)}
               onFocus={() => setFocado(true)}
               onBlur={() => setFocado(false)}
-              style={{...textareaEstilo, border: focado ? '2px solid #009c3b' : '1px solid #ddd'}}
+              style={{
+                ...textareaEstilo, 
+                border: focado ? '2px solid #009c3b' : '1px solid #ddd',
+                color: '#1a1a1a' // FORÇA A COR DO TEXTO PARA PRETO QUASE TOTAL
+              }}
             />
           </div>
           <div style={{ display: 'flex', justifyContent: 'end', marginTop: '12px' }}>
@@ -194,7 +192,11 @@ function Feed({ usuario }) {
 
               {isEditando ? (
                 <div>
-                  <textarea value={textoEditado} onChange={(e) => setTextoEditado(e.target.value)} style={textareaEstilo} />
+                  <textarea 
+                    value={textoEditado} 
+                    onChange={(e) => setTextoEditado(e.target.value)} 
+                    style={{...textareaEstilo, color: '#1a1a1a'}} // TAMBÉM NA EDIÇÃO
+                  />
                   <div style={{ display: 'flex', gap: '8px', marginTop: '8px', justifyContent: 'end' }}>
                     <button onClick={() => setEditandoId(null)} style={btnCancel}>Cancelar</button>
                     <button onClick={() => salvarEdicao(post.id)} style={btnSave}>Salvar</button>
@@ -230,7 +232,23 @@ const btnDeleteConfirm = { background: '#ff3b30', color: 'white', border: 'none'
 const btnCancel = { background: '#eee', color: '#555', border: 'none', padding: '10px 20px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' };
 const btnSave = { background: '#009c3b', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' };
 const cardEstilo = { background: 'white', borderRadius: '16px', padding: '20px', marginBottom: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' };
-const textareaEstilo = { flex: 1, padding: '12px', borderRadius: '12px', fontSize: '15px', outline: 'none', background: 'white', resize: 'none', width: '100%', boxSizing: 'border-box', minHeight: '60px' };
+
+// ADICIONEI 'color: "#1a1a1a"' PARA GARANTIR CONTRASTE
+const textareaEstilo = { 
+  flex: 1, 
+  padding: '12px', 
+  borderRadius: '12px', 
+  fontSize: '15px', 
+  outline: 'none', 
+  background: 'white', 
+  resize: 'none', 
+  width: '100%', 
+  boxSizing: 'border-box', 
+  minHeight: '80px',
+  color: '#1a1a1a', 
+  border: '1px solid #ddd'
+};
+
 const btnPublicar = (vazio) => ({ padding: '8px 24px', borderRadius: '10px', border: 'none', color: 'white', fontWeight: 'bold', cursor: vazio ? 'not-allowed' : 'pointer', background: vazio ? '#ccc' : 'linear-gradient(90deg, #002776, #009c3b)' });
 const barraAcoes = { display: 'flex', gap: '12px', borderTop: '1px solid #eee', paddingTop: '12px', marginTop: '12px' };
 const btnAcao = { border: 'none', background: 'none', cursor: 'pointer', fontWeight: 'bold', padding: '6px 12px' };
