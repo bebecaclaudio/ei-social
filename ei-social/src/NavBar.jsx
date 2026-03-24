@@ -6,23 +6,25 @@ function NavBar({ usuario, telaAtual, onFeed, onComunidades, onPerfil, onNotific
   const [fotoExibir, setFotoExibir] = useState('')
 
   useEffect(() => {
+    // 1. Se não houver usuário logado, não faz nada
     if (!usuario?.uid) return
 
-    // Escuta o banco de dados em tempo real para atualizar a foto na barra
+    // 2. Criamos um "ouvinte" (onSnapshot) específico para o documento da Sofia no Firestore
     const unsub = onSnapshot(doc(db, "usuarios", usuario.uid), (docSnap) => {
       if (docSnap.exists()) {
         const dados = docSnap.data()
-        // PRIORIDADE: 1º Foto do banco (Base64) | 2º Foto do Google | 3º Vazio
+        // PRIORIDADE: Foto do Banco (Base64) > Foto do Google > Vazio
         setFotoExibir(dados.foto || usuario?.photoURL || '')
       } else {
+        // Se o documento ainda não existir no banco, usa a do Google
         setFotoExibir(usuario?.photoURL || '')
       }
     })
 
-    return () => unsub()
+    return () => unsub() // Limpa o ouvinte ao fechar o componente
   }, [usuario])
 
-  // Função de segurança para garantir que links virem <img> e não texto
+  // 3. Função de segurança para não deixar o link virar texto
   const ehLink = (str) => typeof str === 'string' && (str.startsWith('http') || str.startsWith('data:image'));
 
   return (
@@ -38,9 +40,14 @@ function NavBar({ usuario, telaAtual, onFeed, onComunidades, onPerfil, onNotific
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <button onClick={onNotificacoes} style={iconBtnStyle}>🔔</button>
           
+          {/* CÍRCULO DO AVATAR NA NAVBAR */}
           <div onClick={onPerfil} style={avatarStyle}>
             {ehLink(fotoExibir) ? (
-              <img src={fotoExibir} alt="" style={imgStyle} />
+              <img 
+                src={fotoExibir} 
+                alt="" 
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+              />
             ) : (
               <span style={{ fontSize: '18px' }}>👤</span>
             )}
@@ -53,14 +60,13 @@ function NavBar({ usuario, telaAtual, onFeed, onComunidades, onPerfil, onNotific
   )
 }
 
-// Estilos mantendo seu padrão visual
+// Estilos (mantive o padrão verde que você gosta)
 const navStyle = { background: '#009c3b', padding: '10px 0', position: 'sticky', top: 0, zIndex: 1000 };
 const containerStyle = { maxWidth: '1000px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 20px' };
 const menuStyle = { display: 'flex', gap: '15px' };
 const btnStyle = (ativo) => ({ background: ativo ? 'rgba(255,255,255,0.2)' : 'none', border: 'none', color: 'white', fontWeight: 'bold', cursor: 'pointer', padding: '8px 12px', borderRadius: '8px' });
-const avatarStyle = { width: '34px', height: '34px', borderRadius: '50%', overflow: 'hidden', cursor: 'pointer', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid white' };
-const imgStyle = { width: '100%', height: '100%', objectFit: 'cover' };
+const avatarStyle = { width: '38px', height: '38px', borderRadius: '50%', overflow: 'hidden', cursor: 'pointer', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid white' };
 const iconBtnStyle = { background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer' };
-const logoutBtnStyle = { background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '5px 15px', borderRadius: '20px', cursor: 'pointer', marginLeft: '10px' };
+const logoutBtnStyle = { background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '5px 15px', borderRadius: '20px', cursor: 'pointer' };
 
 export default NavBar;
