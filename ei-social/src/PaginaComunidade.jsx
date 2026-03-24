@@ -1,36 +1,30 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { db } from './firebase-config';
 import { 
-  collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc 
+  collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, 
+  doc, getDoc, limit, startAfter, getDocs 
 } from 'firebase/firestore';
 import CardPostComunidade from './CardPostComunidade';
 
-// --- COMPONENTE AVATARAUTOR ---
-function AvatarAutor({ uid, fallbackEmoji, tamanho = '45px' }) {
-  const [fotoUrl, setFotoUrl] = useState(null);
+// --- COMPONENTE: AvatarMembro ---
+// Mantém o estilo visual dos membros consistente
+function AvatarMembro({ uid, tamanho = '48px' }) {
+  const [dados, setDados] = useState(null);
   useEffect(() => {
     if (!uid) return;
-    const carregarFoto = async () => {
-      const userDoc = await getDoc(doc(db, "usuarios", uid));
-      if (userDoc.exists()) setFotoUrl(userDoc.data().foto);
-    };
-    carregarFoto();
+    getDoc(doc(db, "usuarios", uid)).then(d => d.exists() && setDados(d.data()));
   }, [uid]);
 
-  const imagemParaExibir = fotoUrl || (typeof fallbackEmoji === 'string' && fallbackEmoji.startsWith('http') ? fallbackEmoji : null);
-
   return (
-    <div style={{ 
-      width: tamanho, height: tamanho, borderRadius: '50%', 
-      overflow: 'hidden', background: '#eee', display: 'flex', 
-      alignItems: 'center', justifyContent: 'center', border: '1px solid #ddd', flexShrink: 0
+    <div title={dados?.nome || "Membro"} style={{ 
+      width: tamanho, height: tamanho, borderRadius: '14px', 
+      overflow: 'hidden', background: '#e1e8ed', flexShrink: 0, border: '1px solid #ddd' 
     }}>
-      {imagemParaExibir ? (
-        <img src={imagemParaExibir} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-      ) : (
-        <span style={{ fontSize: parseInt(tamanho) * 0.6 + 'px' }}>{fallbackEmoji || '👤'}</span>
-      )}
+      <img 
+        src={dados?.foto || `https://ui-avatars.com/api/?name=U&background=random`} 
+        alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+      />
     </div>
   );
 }
@@ -38,14 +32,22 @@ function AvatarAutor({ uid, fallbackEmoji, tamanho = '45px' }) {
 function PaginaComunidade({ usuario }) {
   const { id } = useParams();
   const navigate = useNavigate();
+  
+  // --- ESTADOS DE LAYOUT E CONTEÚDO ---
   const [comu, setComu] = useState(null);
   const [posts, setPosts] = useState([]);
   const [novoPost, setNovoPost] = useState('');
-  const [largura, setLargura] = useState(window.innerWidth);
   const [abaAtiva, setAbaAtiva] = useState('feed');
+  const [largura, setLargura] = useState(window.innerWidth);
 
-  const LIMITE_POST = 5000;
+  // --- ESTADOS DE MEMBROS (INFINITE SCROLL) ---
+  const [membros, setMembros] = useState([]);
+  const [ultimoDoc, setUltimoDoc] = useState(null);
+  const [carregandoMembros, setCarregandoMembros] = useState(false);
+  const [temMaisMembros, setTemMaisMembros] = useState(true);
+  const sensorScroll = useRef(); // O "olho" que detecta o fim da lista
 
+  // --- CONTROLE DE RESPONSIVIDADE (SEM QUEBRAS) ---
   useEffect(() => {
     const handleResize = () => setLargura(window.innerWidth);
     window.addEventListener('resize', handleResize);
@@ -54,6 +56,7 @@ function PaginaComunidade({ usuario }) {
 
   const isMobile = largura <= 992;
 
+  // 1. CARREGAR DADOS DA COMUNIDADE
   useEffect(() => {
     const q = query(collection(db, "comunidades"), where("slug", "==", id));
     return onSnapshot(q, (snap) => {
@@ -61,6 +64,7 @@ function PaginaComunidade({ usuario }) {
     });
   }, [id]);
 
+  // 2. CARREGAR POSTS (FEED REAL-TIME)
   useEffect(() => {
     if (!comu?.id) return;
     const q = query(collection(db, "posts_comunidades"), where("comunidadeId", "==", comu.id), orderBy("data", "desc"));
@@ -69,8 +73,51 @@ function PaginaComunidade({ usuario }) {
     });
   }, [comu?.id]);
 
+  // 3. FUNÇÃO DE CARREGAMENTO DE MEMBROS (PAGINADA)
+  const carregarMembros = async () => {
+    if (carregandoMembros || !temMaisMembros || !comu?.id) return;
+    
+    setCarregandoMembros(true);
+    try {
+      const membrosRef = collection(db, "usuarios");
+      let q = query(
+        membrosRef, 
+        where("comunidadesSeguidas", "array-contains", comu.id),
+        orderBy("nome"),
+        limit(12) // Carrega de 12 em 12 para manter o grid bonito
+      );
+
+      if (ultimoDoc) q = query(q, startAfter(ultimoDoc));
+
+      const snapshot = await getDocs(q);
+      
+      if (snapshot.empty) {
+        setTemMaisMembros(false);
+      } else {
+        const novos = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        setMembros(prev => [...prev, ...novos]);
+        setUltimoDoc(snapshot.docs[snapshot.docs.length - 1]);
+      }
+    } catch (e) { console.error("Erro membros:", e); }
+    setCarregandoMembros(false);
+  };
+
+  // 4. OBSERVER (SÓ ATIVA QUANDO NECESSÁRIO)
+  useEffect(() => {
+    // Só observa se estiver na aba membros (mobile) ou sempre no desktop
+    if (isMobile && abaAtiva !== 'membros') return;
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && temMaisMembros) carregarMembros();
+    }, { threshold: 0.1 });
+
+    if (sensorScroll.current) observer.observe(sensorScroll.current);
+    return () => observer.disconnect();
+  }, [abaAtiva, ultimoDoc, comu?.id, isMobile]);
+
+  // Enviar Post
   async function enviarPost() {
-    if (!novoPost.trim() || novoPost.length > LIMITE_POST || !usuario) return;
+    if (!novoPost.trim() || !usuario) return;
     await addDoc(collection(db, "posts_comunidades"), {
       comunidadeId: comu.id, texto: novoPost, autorUid: usuario.uid,
       autorNome: usuario.displayName, autorFoto: usuario.photoURL || null,
@@ -79,127 +126,112 @@ function PaginaComunidade({ usuario }) {
     setNovoPost('');
   }
 
-  if (!comu) return <div style={{textAlign:'center', padding:'50px'}}>Carregando...</div>;
-
-  const MenuMobile = () => (
-    <div style={menuMobileContainer}>
-      {['feed', 'sobre', 'membros'].map(aba => (
-        <button key={aba} onClick={() => setAbaAtiva(aba)} style={abaAtiva === aba ? btnAbaAtiva : btnAbaInativa}>
-          <span style={{fontSize: '18px'}}>{aba === 'feed' ? '📰' : aba === 'sobre' ? 'ℹ️' : '👥'}</span>
-          <span style={{fontSize: '11px', fontWeight: 'bold'}}>{aba.toUpperCase()}</span>
-        </button>
-      ))}
-    </div>
-  );
+  if (!comu) return <div style={msgAviso}>Sincronizando Pleiadians...</div>;
+  const souDono = comu.criadoPor === usuario?.uid;
 
   return (
-    <div style={{ background: '#f0f2f5', minHeight: '100vh', paddingBottom: '80px' }}>
+    <div style={{ background: '#f0f2f5', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
+      
+      {/* HEADER / BANNER */}
       <div style={containerBanner}>
-        <div style={bannerEstilo(comu.capaUrl || '#002776')}>
-          <div style={isMobile ? avatarFlutuanteMobile : avatarFlutuanteDesktop}>
-            {comu.emoji || '✨'}
-          </div>
+        <div style={estiloBanner(comu.capaUrl || '#002776')}>
+          <div style={avatarFixo}>{comu.emoji || '✨'}</div>
         </div>
       </div>
 
-      <div style={isMobile ? layoutMobile : layoutDesktop}>
+      {/* NAV ABAS (MOBILE) */}
+      {isMobile && (
+        <div style={barraAbas}>
+          <button onClick={() => setAbaAtiva('feed')} style={abaAtiva === 'feed' ? abaOn : abaOff}>FEED</button>
+          <button onClick={() => setAbaAtiva('sobre')} style={abaAtiva === 'sobre' ? abaOn : abaOff}>SOBRE</button>
+          <button onClick={() => setAbaAtiva('membros')} style={abaAtiva === 'membros' ? abaOn : abaOff}>MEMBROS</button>
+          {souDono && <button onClick={() => navigate(`/comunidades/${id}/gerenciar`)} style={abaOff}>⚙️</button>}
+        </div>
+      )}
+
+      {/* GRID PRINCIPAL (3 COLUNAS NO DESKTOP) */}
+      <div style={gridMaster}>
         
-        {/* COLUNA 1: SOBRE (DESKTOP) */}
-        {!isMobile && (
-          <aside style={{ flex: '0 0 300px' }}>
-            <div style={cardBrancoCentrado}>
-              <h1 style={tituloComu}>{comu.nome}</h1>
-              <span style={badgeCat}>{comu.categoria}</span>
-              <p style={descText}>{comu.descricao || "Comunidade oficial."}</p>
-              {comu.criadoPor === usuario?.uid && (
-                <button onClick={() => navigate(`/comunidades/${id}/gerenciar`)} style={btnAmarelo}>⚙️ Gerenciar</button>
+        {/* COLUNA 1: SOBRE */}
+        {(!isMobile || abaAtiva === 'sobre') && (
+          <aside style={isMobile ? mobWidth : colEsq}>
+            <div style={cardInfo}>
+              <h1 style={nomeComu}>{comu.nome}</h1>
+              <span style={catBadge}>{comu.categoria}</span>
+              <div style={divisor} />
+              <p style={descText}>{comu.descricao || "Fragmentos de uma nova era."}</p>
+              {souDono && !isMobile && (
+                <button onClick={() => navigate(`/comunidades/${id}/gerenciar`)} style={btnAdm}>Painel Admin</button>
               )}
             </div>
           </aside>
         )}
 
-        {/* COLUNA 2: FEED PRINCIPAL / CONTEÚDO DINÂMICO */}
-        <main style={{ flex: 1, maxWidth: isMobile ? '100%' : '650px' }}>
-          {isMobile && <MenuMobile />}
-
-          {(abaAtiva === 'feed' || !isMobile) && (
-            <div style={{ display: abaAtiva === 'feed' ? 'block' : 'none' }}>
-              <div style={cardBrancoPostar}>
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <AvatarAutor uid={usuario?.uid} tamanho="45px" />
-                  <textarea 
-                    placeholder="No que está pensando?" 
-                    value={novoPost} 
-                    onChange={(e) => setNovoPost(e.target.value)} 
-                    style={inputTextArea}
-                  />
-                </div>
-                <div style={{ textAlign: 'right', marginTop: '10px' }}>
-                  <button onClick={enviarPost} style={btnVerde}>Postar</button>
-                </div>
-              </div>
-              {posts.map(p => <CardPostComunidade key={p.id} p={p} usuario={usuario} slugComu={id} />)}
+        {/* COLUNA 2: FEED */}
+        {(!isMobile || abaAtiva === 'feed') && (
+          <main style={colCentro(isMobile)}>
+            <div style={cardPostar}>
+              <textarea 
+                value={novoPost} onChange={e => setNovoPost(e.target.value)}
+                placeholder="O que você está concatenando?" style={inputArea}
+              />
+              <div style={{textAlign: 'right'}}><button onClick={enviarPost} style={btnPost}>Postar</button></div>
             </div>
-          )}
+            {posts.map(p => <CardPostComunidade key={p.id} p={p} usuario={usuario} slugComu={id} />)}
+          </main>
+        )}
 
-          {abaAtiva === 'sobre' && isMobile && (
-            <div style={cardBranco}>
-              <h2 style={tituloComu}>Sobre</h2>
-              <p>{comu.descricao}</p>
-            </div>
-          )}
-
-          {abaAtiva === 'membros' && isMobile && (
-            <div style={cardBranco}>
-              <h2 style={tituloComu}>Membros</h2>
+        {/* COLUNA 3: MEMBROS (INFINITE) */}
+        {(!isMobile || abaAtiva === 'membros') && (
+          <aside style={isMobile ? mobWidth : colDir}>
+            <div style={cardInfo}>
+              <h4 style={subTitulo}>Egrégora</h4>
               <div style={gridMembros}>
-                <AvatarAutor uid={usuario?.uid} tamanho="50px" />
+                {membros.map(m => <AvatarMembro key={m.id} uid={m.id} />)}
               </div>
-            </div>
-          )}
-        </main>
-
-        {/* COLUNA 3: MEMBROS (DESKTOP) - REATIVADA ✅ */}
-        {!isMobile && (
-          <aside style={{ flex: '0 0 280px' }}>
-            <div style={cardBrancoCentrado}>
-              <h4 style={labelMembros}>Membros</h4>
-              <div style={gridMembros}>
-                <AvatarAutor uid={usuario?.uid} tamanho="40px" />
-                {/* Aqui entrará o map de membros reais em breve */}
+              
+              {/* SENSOR DE SCROLL INFINITO */}
+              <div ref={sensorScroll} style={areaSensor}>
+                {carregandoMembros && <div className="spinner">...</div>}
+                {!temMaisMembros && membros.length > 0 && <span style={fimLista}>Círculo completo</span>}
               </div>
-              <button style={btnLink}>Ver todos</button>
             </div>
           </aside>
         )}
-
       </div>
     </div>
   );
 }
 
-// Estilos (simplificados para o exemplo, mantenha os seus anteriores)
-const containerBanner = { maxWidth: '1280px', margin: '0 auto', position: 'relative' };
-const bannerEstilo = (bg) => ({ height: '220px', background: bg.startsWith('http') ? `url(${bg}) center/cover` : bg, borderRadius: '0 0 25px 25px', display: 'flex', justifyContent: 'center' });
-const avatarFlutuanteDesktop = { width: '100px', height: '100px', background: 'white', borderRadius: '25px', position: 'absolute', bottom: '-50px', left: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '50px', border: '4px solid white' };
-const avatarFlutuanteMobile = { width: '100px', height: '100px', background: 'white', borderRadius: '25px', position: 'absolute', bottom: '-50px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '50px', border: '4px solid white' };
-const layoutDesktop = { display: 'flex', justifyContent: 'center', marginTop: '70px', gap: '25px', padding: '0 20px' };
-const layoutMobile = { display: 'flex', flexDirection: 'column', padding: '70px 10px 20px' };
-const cardBranco = { background: 'white', padding: '20px', borderRadius: '25px', border: '1px solid #ddd' };
-const cardBrancoCentrado = { ...cardBranco, textAlign: 'center' };
-const cardBrancoPostar = { ...cardBranco, marginBottom: '10px' };
-const tituloComu = { fontSize: '20px', fontWeight: '900' };
-const badgeCat = { background: '#eef2ff', color: '#5865f2', padding: '4px 10px', borderRadius: '15px', fontSize: '12px' };
-const descText = { color: '#666', fontSize: '14px' };
-const inputTextArea = { width: '100%', border: 'none', outline: 'none', resize: 'none', minHeight: '60px' };
-const btnVerde = { background: '#00a859', color: 'white', border: 'none', padding: '8px 20px', borderRadius: '12px', fontWeight: 'bold' };
-const btnAmarelo = { width: '100%', padding: '10px', background: '#FFD700', border: 'none', borderRadius: '12px', fontWeight: '900' };
-const gridMembros = { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginTop: '15px' };
-const labelMembros = { color: '#888', fontSize: '12px', textTransform: 'uppercase' };
-const btnLink = { background: 'none', border: 'none', color: '#002776', fontWeight: 'bold', marginTop: '10px' };
-const menuMobileContainer = { display: 'flex', background: 'white', borderBottom: '1px solid #eee', marginBottom: '10px' };
-const btnAba = { flex: 1, padding: '10px', background: 'none', border: 'none' };
-const btnAbaInativa = { ...btnAba, color: '#999' };
-const btnAbaAtiva = { ...btnAba, color: '#002776', borderBottom: '3px solid #002776' };
+// --- ESTILOS À PROVA DE ERRO ---
+const containerBanner = { maxWidth: '1200px', margin: '0 auto', position: 'relative' };
+const estiloBanner = (bg) => ({ height: '230px', background: bg.startsWith('http') ? `url(${bg}) center/cover` : bg, borderRadius: '0 0 30px 30px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' });
+const avatarFixo = { width: '100px', height: '100px', background: 'white', borderRadius: '28px', position: 'absolute', bottom: '-50px', left: '50%', marginLeft: '-50px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '50px', border: '5px solid white', boxShadow: '0 5px 15px rgba(0,0,0,0.1)' };
+const gridMaster = { display: 'flex', justifyContent: 'center', gap: '25px', padding: '0 20px', maxWidth: '1240px', margin: '70px auto 0' };
+const colEsq = { width: '320px', position: 'sticky', top: '20px', alignSelf: 'flex-start' };
+const colDir = { width: '280px', position: 'sticky', top: '20px', alignSelf: 'flex-start' };
+const colCentro = (mob) => ({ flex: 1, maxWidth: mob ? '100%' : '600px' });
+const mobWidth = { width: '100%' };
+
+const cardInfo = { background: 'white', padding: '25px', borderRadius: '24px', border: '1px solid #e1e8ed', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' };
+const nomeComu = { fontSize: '24px', fontWeight: '900', color: '#1a1a1a', margin: '0 0 10px' };
+const catBadge = { background: '#eef2ff', color: '#5865f2', padding: '6px 14px', borderRadius: '12px', fontSize: '13px', fontWeight: 'bold' };
+const divisor = { height: '1px', background: '#f0f2f5', margin: '20px 0' };
+const descText = { color: '#444', lineHeight: '1.6', fontSize: '15px' };
+
+const cardPostar = { background: 'white', padding: '20px', borderRadius: '24px', border: '1px solid #e1e8ed', marginBottom: '25px' };
+const inputArea = { width: '100%', border: 'none', outline: 'none', minHeight: '80px', fontSize: '18px', color: '#1a1a1a', resize: 'none', background: '#fff' };
+const btnPost = { background: '#00a859', color: 'white', border: 'none', padding: '10px 30px', borderRadius: '14px', fontWeight: 'bold', cursor: 'pointer' };
+const btnAdm = { width: '100%', padding: '12px', background: '#FFD700', border: 'none', borderRadius: '14px', fontWeight: 'bold', marginTop: '20px', color: '#000' };
+
+const barraAbas = { display: 'flex', background: 'white', borderBottom: '1px solid #ddd', marginTop: '60px', position: 'sticky', top: 0, zIndex: 100 };
+const abaOn = { flex: 1, padding: '18px', border: 'none', background: 'none', color: '#00a859', borderBottom: '4px solid #00a859', fontWeight: '900' };
+const abaOff = { flex: 1, padding: '18px', border: 'none', background: 'none', color: '#888', fontWeight: 'bold' };
+
+const gridMembros = { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '12px', marginTop: '10px' };
+const subTitulo = { color: '#888', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '15px' };
+const areaSensor = { minHeight: '30px', textAlign: 'center', marginTop: '20px' };
+const fimLista = { color: '#ccc', fontSize: '11px', fontWeight: 'bold' };
+const msgAviso = { textAlign: 'center', padding: '100px', fontWeight: 'bold', color: '#666' };
 
 export default PaginaComunidade;
