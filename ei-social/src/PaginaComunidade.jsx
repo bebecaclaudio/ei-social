@@ -4,8 +4,9 @@ import { db } from './firebase-config';
 import { 
   collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc 
 } from 'firebase/firestore';
+import CardPostComunidade from './CardPostComunidade';
 
-// Componente de Avatar que recupera a foto real do usuário no banco
+// --- COMPONENTE AVATARAUTOR (RESGATADO E NEUTRO) ---
 function AvatarAutor({ uid, fallbackEmoji, tamanho = '45px' }) {
   const [fotoUrl, setFotoUrl] = useState(null);
   useEffect(() => {
@@ -34,7 +35,42 @@ function AvatarAutor({ uid, fallbackEmoji, tamanho = '45px' }) {
   );
 }
 
-import CardPostComunidade from './CardPostComunidade';
+// --- NOVO COMPONENTE: MENU HORIZONTAL MOBILE ---
+function MenuComunidadeMobile({ comu, usuario, navigate }) {
+  const abas = [
+    { id: 'feed', label: 'Feed', icone: '📰' },
+    { id: 'sobre', label: 'Sobre', icone: 'ℹ️' },
+    { id: 'membros', label: 'Membros', icone: '👥' },
+  ];
+
+  // Se for o dono, adiciona a aba de gerenciamento
+  if (comu.criadoPor === usuario?.uid) {
+    abas.push({ id: 'gerenciar', label: 'Gerenciar', icone: '⚙️' });
+  }
+
+  const [abaAtiva, setAbaAtiva] = useState('feed');
+
+  return (
+    <div style={menuMobileContainer}>
+      {abas.map(aba => (
+        <button 
+          key={aba.id} 
+          onClick={() => {
+            setAbaAtiva(aba.id);
+            if (aba.id === 'gerenciar') {
+              navigate(`/comunidades/${comu.slug}/gerenciar`);
+            }
+            // Adicionar lógica para trocar visualização se necessário
+          }}
+          style={aba.id === abaAtiva ? btnAbaAtiva : btnAbaInativa}
+        >
+          <span style={{fontSize: '18px'}}>{aba.icone}</span>
+          <span style={{fontSize: '12px', fontWeight: 'bold'}}>{aba.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
 
 function PaginaComunidade({ usuario }) {
   const { id } = useParams();
@@ -70,78 +106,79 @@ function PaginaComunidade({ usuario }) {
   async function enviarPost() {
     if (!novoPost.trim() || !usuario) return;
     await addDoc(collection(db, "posts_comunidades"), {
-      comunidadeId: comu.id,
-      texto: novoPost,
-      autorUid: usuario.uid,
-      autorNome: usuario.displayName,
-      data: serverTimestamp(),
-      curtidas: [],
-      visualizacoes: 0
+      comunidadeId: comu.id, texto: novoPost, autorUid: usuario.uid,
+      autorNome: usuario.displayName, data: serverTimestamp(),
+      curtidas: [], visualizacoes: 0
     });
     setNovoPost('');
   }
 
-  if (!comu) return <div style={{textAlign:'center', padding:'50px', fontWeight:'bold'}}>Carregando...</div>;
+  if (!comu) return <div style={{textAlign:'center', padding:'50px'}}>Carregando...</div>;
 
   return (
-    <div style={{ background: '#f0f2f5', minHeight: '100vh', paddingBottom: '50px' }}>
+    <div style={{ background: '#f0f2f5', minHeight: '100vh', paddingBottom: '80px' }}>
       
-      {/* HEADER / BANNER */}
+      {/* BANNER CENTRALIZADO ✅ */}
       <div style={containerBanner}>
         <div style={bannerEstilo(comu.capaUrl || '#002776')}>
-          <div style={avatarFlutuante}>
+          <div style={isMobile ? avatarFlutuanteMobile : avatarFlutuanteDesktop}>
             {comu.emoji || '✨'}
           </div>
         </div>
-
-        {/* TITULO E INFO (Ajustado para leitura) */}
-        <div style={isMobile ? infoMobile : infoDesktop}>
-          <h1 style={tituloEstilo}>{comu.nome}</h1>
-          <span style={badgeEstilo}>{comu.categoria}</span>
-        </div>
       </div>
 
-      {/* CONTEÚDO PRINCIPAL */}
       <div style={isMobile ? layoutMobile : layoutDesktop}>
         
-        {/* COLUNA ESQUERDA (INFO) */}
+        {/* DESKTOP: COLUNA ESQUERDA (SIDEBAR) */}
         {!isMobile && (
           <aside style={{ flex: '0 0 300px' }}>
-            <div style={cardBranco}>
-              <p style={textoDesc}>Página oficial da comunidade {comu.nome}.</p>
-              <button onClick={() => navigate(`/comunidades/${id}/gerenciar`)} style={btnAmarelo}>
-                ⚙️ Gerenciar
-              </button>
+            <div style={cardBrancoCentrado}>
+              <h1 style={tituloComu}>{comu.nome}</h1>
+              <span style={badgeCat}>{comu.categoria}</span>
+              <p style={descText}>Comunidade oficial.</p>
+              {comu.criadoPor === usuario?.uid && (
+                <button onClick={() => navigate(`/comunidades/${id}/gerenciar`)} style={btnAmarelo}>
+                  ⚙️ Gerenciar
+                </button>
+              )}
             </div>
           </aside>
         )}
 
-        {/* COLUNA CENTRAL (FEED) */}
+        {/* FEED PRINCIPAL */}
         <main style={{ flex: 1, maxWidth: isMobile ? '100%' : '650px' }}>
-          <div style={cardBranco}>
-            <div style={{ display: 'flex', gap: '12px' }}>
+          
+          {/* MOBILE: MENU HORIZONTAL SUPERIOR ✅ */}
+          {isMobile && (
+            <MenuComunidadeMobile comu={comu} usuario={usuario} navigate={navigate} />
+          )}
+          
+          {/* AREA DE POSTAR */}
+          <div style={cardBrancoPostar}>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
               <AvatarAutor uid={usuario?.uid} tamanho="45px" />
               <textarea 
-                placeholder="No que você está pensando?"
+                placeholder={`No que você está pensando, ${usuario?.displayName?.split(' ')[0]}?`}
                 value={novoPost}
                 onChange={(e) => setNovoPost(e.target.value)}
                 style={inputTextArea}
               />
             </div>
-            <div style={{ textAlign: 'right', marginTop: '10px' }}>
+            <div style={{ textAlign: 'right', marginTop: '12px' }}>
               <button onClick={enviarPost} style={btnVerde}>Postar</button>
             </div>
           </div>
 
+          {/* LISTA DE POSTS */}
           {posts.map(p => (
             <CardPostComunidade key={p.id} p={p} usuario={usuario} />
           ))}
         </main>
 
-        {/* COLUNA DIREITA (MEMBROS) */}
+        {/* DESKTOP: COLUNA DIREITA (MEMBROS) */}
         {!isMobile && (
           <aside style={{ flex: '0 0 280px' }}>
-            <div style={cardBranco}>
+            <div style={cardBrancoCentrado}>
               <h4 style={labelMembros}>Membros</h4>
               <div style={gridMembros}>
                 <AvatarAutor uid={usuario?.uid} tamanho="40px" />
@@ -155,47 +192,95 @@ function PaginaComunidade({ usuario }) {
   );
 }
 
-// --- ESTILOS (RESPONSIVOS E NEUTROS) ---
+// --- ESTILOS REVISADOS E COMPACTOS ---
 
 const containerBanner = { maxWidth: '1280px', margin: '0 auto', padding: '0 15px', position: 'relative' };
 
 const bannerEstilo = (bg) => ({
-  height: '240px',
+  height: '220px', // Um pouco mais baixo no mobile compact
   background: bg.startsWith('http') ? `url(${bg}) center/cover` : bg,
   position: 'relative',
   borderRadius: '0 0 25px 25px',
   marginTop: '10px',
-  boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+  boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+  display: 'flex',
+  justifyContent: 'center' // Centraliza o conteúdo interno (avatar)
 });
 
-const avatarFlutuante = {
-  width: '110px', height: '110px', background: 'white', borderRadius: '25px',
-  position: 'absolute', bottom: '-55px', left: '40px',
+// Avatar Desktop (Lateral)
+const avatarFlutuanteDesktop = {
+  width: '100px', height: '100px', background: 'white', borderRadius: '25px',
+  position: 'absolute', bottom: '-50px', left: '40px',
   display: 'flex', alignItems: 'center', justifyContent: 'center',
-  fontSize: '55px', boxShadow: '0 8px 20px rgba(0,0,0,0.15)', zIndex: 5,
+  fontSize: '50px', boxShadow: '0 8px 20px rgba(0,0,0,0.15)', zIndex: 10,
   border: '4px solid white'
 };
 
-// POSICIONAMENTO DO TITULO
-const infoDesktop = { padding: '20px 0 0 170px', minHeight: '80px' };
-const infoMobile = { padding: '70px 0 0 0', textAlign: 'center' };
+// Avatar Mobile (Centralizado) ✅
+const avatarFlutuanteMobile = {
+  width: '100px', height: '100px', background: 'white', borderRadius: '25px',
+  position: 'absolute', bottom: '-50px', // Mantém a flutuação
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  fontSize: '50px', boxShadow: '0 8px 20px rgba(0,0,0,0.15)', zIndex: 10,
+  border: '4px solid white'
+};
 
-const tituloEstilo = { fontSize: '28px', fontWeight: '900', color: '#1a1a1a', margin: '0 0 5px 0' };
-const badgeEstilo = { background: '#eef2ff', color: '#5865f2', padding: '4px 12px', borderRadius: '15px', fontSize: '12px', fontWeight: 'bold' };
+const layoutDesktop = { display: 'flex', justifyContent: 'center', marginTop: '70px', gap: '25px', maxWidth: '1280px', padding: '0 20px' };
+const layoutMobile = { display: 'flex', flexDirection: 'column', padding: '70px 0 20px', gap: '10px' }; // Sem padding lateral no container do feed
 
-const layoutDesktop = { display: 'flex', justifyContent: 'center', marginTop: '40px', gap: '25px', maxWidth: '1280px', padding: '0 15px' };
-const layoutMobile = { display: 'flex', flexDirection: 'column', padding: '20px 15px', gap: '15px' };
+// CARDS BÁSICOS
+const cardBranco = { background: 'white', padding: '20px', borderRadius: '25px', border: '1px solid #ddd' };
+const cardBrancoCentrado = { ...cardBranco, textAlign: 'center' };
+const cardBrancoPostar = { ...cardBranco, borderRadius: '20px', marginBottom: '10px', padding: '15px', border: '1px solid #e1e8ed', margin: '0 10px' }; // Margem lateral apenas no card
 
-const cardBranco = { background: 'white', padding: '20px', borderRadius: '20px', border: '1px solid #ddd', boxShadow: '0 2px 8px rgba(0,0,0,0.05)', marginBottom: '15px' };
-const textoDesc = { color: '#555', fontSize: '14px', lineHeight: '1.5' };
+// TEXTOS E BADGES
+const tituloComu = { fontSize: '22px', fontWeight: '900', margin: '10px 0', color: '#1a1a1a' };
+const badgeCat = { background: '#eef2ff', color: '#5865f2', padding: '4px 12px', borderRadius: '15px', fontSize: '12px', fontWeight: 'bold' };
+const descText = { color: '#666', fontSize: '14px', margin: '10px 0' };
 
-const inputTextArea = { width: '100%', border: '1px solid #eee', borderRadius: '10px', padding: '12px', outline: 'none', resize: 'none', minHeight: '70px', background: '#fff', fontSize: '16px', color: '#1a1a1a' };
+// INPUT E BOTOES
+const inputTextArea = { width: '100%', border: 'none', outline: 'none', fontSize: '16px', resize: 'none', minHeight: '50px', background: '#fff', color: '#1a1a1a', fontFamily: 'inherit' };
+const btnVerde = { background: '#00a859', color: 'white', border: 'none', padding: '8px 25px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' };
+const btnAmarelo = { width: '100%', padding: '10px', background: '#FFD700', border: 'none', borderRadius: '12px', fontWeight: '900', cursor: 'pointer', marginTop: '10px' };
 
-const btnVerde = { background: '#00a859', color: 'white', border: 'none', padding: '10px 25px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' };
-const btnAmarelo = { width: '100%', padding: '12px', background: '#FFD700', border: 'none', borderRadius: '12px', fontWeight: '900', marginTop: '15px', cursor: 'pointer' };
-
-const gridMembros = { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px', marginTop: '15px' };
+// MEMBROS DESKTOP
+const gridMembros = { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginTop: '15px', justifyItems: 'center' };
 const labelMembros = { color: '#888', fontSize: '13px', textTransform: 'uppercase', fontWeight: 'bold' };
-const btnLink = { background: 'none', border: 'none', color: '#002776', fontWeight: 'bold', marginTop: '15px', cursor: 'pointer', fontSize: '14px' };
+const btnLink = { background: 'none', border: 'none', color: '#002776', fontWeight: 'bold', marginTop: '15px', cursor: 'pointer' };
+
+// --- ESTILOS DO MENU MOBILE HORIZONTAL ✅ ---
+const menuMobileContainer = { 
+  display: 'flex', 
+  background: 'white', 
+  borderBottom: '1px solid #eee', 
+  borderTop: '1px solid #eee',
+  marginBottom: '10px',
+  position: 'sticky', // Fixa o menu no topo ao rolar
+  top: 0,
+  zIndex: 100
+};
+
+const btnAba = { 
+  flex: 1, 
+  display: 'flex', 
+  flexDirection: 'column', 
+  alignItems: 'center', 
+  justifyContent: 'center', 
+  gap: '4px',
+  padding: '10px 0', 
+  background: 'none', 
+  border: 'none', 
+  cursor: 'pointer',
+  color: '#555',
+  transition: 'all 0.2s'
+};
+
+const btnAbaInativa = { ...btnAba };
+const btnAbaAtiva = { 
+  ...btnAba, 
+  color: '#002776', // Cor principal
+  borderBottom: '3px solid #002776', // Barra de destaque
+  background: '#f8faff' // Fundo leve
+};
 
 export default PaginaComunidade;
