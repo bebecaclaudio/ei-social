@@ -4,12 +4,12 @@ import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import Cropper from 'react-easy-crop'
 
-// Função auxiliar para processar o recorte da imagem (Gera o arquivo final)
 const getCroppedImg = async (imageSrc, crop) => {
   const image = await new Promise((resolve, reject) => {
     const img = new Image();
-    img.src = imageSrc;
+    // ESSA LINHA AJUDA A EVITAR O TRAVAMENTO NO "PROCESSANDO"
     img.setAttribute('crossOrigin', 'anonymous'); 
+    img.src = imageSrc;
     img.onload = () => resolve(img);
     img.onerror = (error) => reject(error);
   });
@@ -45,7 +45,6 @@ function Perfil({ usuario }) {
   const [subindoFoto, setSubindoFoto] = useState(false)
   const [hoverFoto, setHoverFoto] = useState(false)
 
-  // Estados para o Corte (Crop)
   const [imagemParaCortar, setImagemParaCortar] = useState(null)
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
@@ -119,7 +118,6 @@ function Perfil({ usuario }) {
   return (
     <div style={{ minHeight: '100vh', background: '#f0f2f5', paddingBottom: '40px', fontFamily: 'sans-serif' }}>
       
-      {/* MODAL DE CORTE (ZOOM E CROP) */}
       {imagemParaCortar && (
         <div style={modalOverlay}>
           <div style={cropContainer}>
@@ -136,10 +134,8 @@ function Perfil({ usuario }) {
         </div>
       )}
 
-      {/* BANNER COLORIDO */}
       <div style={{ height: '180px', background: 'linear-gradient(135deg, #002776, #009c3b, #ffdf00)', position: 'relative' }}>
         
-        {/* AVATAR COM A CAMERAZINHA FOFA */}
         <div style={avatarWrapper}>
           <div 
             style={avatarCircle}
@@ -154,7 +150,6 @@ function Perfil({ usuario }) {
               <span style={{ fontSize: '50px' }}>👤</span>
             )}
 
-            {/* OVERLAY DA CÂMERA */}
             <div
               onClick={() => setMenuFoto(!menuFoto)}
               style={{
@@ -166,7 +161,6 @@ function Perfil({ usuario }) {
             </div>
           </div>
 
-          {/* MENU DROPDOWN DA FOTO */}
           {menuFoto && (
             <div style={menuDropdown}>
               <label style={menuItem}>
@@ -190,12 +184,12 @@ function Perfil({ usuario }) {
           )}
         </div>
 
+        {/* BOTÃO COM TEXTO EM PRETO PARA MELHOR CONTRASTE */}
         <button onClick={() => setEditando(!editando)} style={btnEdit}>
           {editando ? 'Cancelar' : 'Editar Perfil'}
         </button>
       </div>
 
-      {/* CONTEÚDO DO PERFIL */}
       <div style={{ textAlign: 'center', marginTop: '70px', padding: '0 20px' }}>
         {editando ? (
           <div style={formStyle}>
@@ -218,7 +212,6 @@ function Perfil({ usuario }) {
   )
 }
 
-// ESTILOS (CSS-in-JS)
 const modalOverlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' };
 const cropContainer = { position: 'relative', width: '320px', height: '320px', background: '#333', borderRadius: '12px', overflow: 'hidden' };
 const avatarWrapper = { position: 'absolute', bottom: '-50px', left: '50%', transform: 'translateX(-50%)', zIndex: 10 };
@@ -226,7 +219,22 @@ const avatarCircle = { width: '120px', height: '120px', borderRadius: '50%', bac
 const cameraOverlay = { position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: '0.3s' };
 const menuDropdown = { position: 'absolute', top: '130px', left: '50%', transform: 'translateX(-50%)', background: 'white', padding: '10px', borderRadius: '15px', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '160px' };
 const menuItem = { padding: '10px', textAlign: 'center', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', borderRadius: '8px', background: '#f8f9fa' };
-const btnEdit = { position: 'absolute', right: '20px', bottom: '20px', padding: '10px 20px', borderRadius: '25px', border: 'none', background: 'white', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' };
+
+// ESTILO DO BOTÃO EDITAR COM TEXTO PRETO (#000)
+const btnEdit = { 
+  position: 'absolute', 
+  right: '20px', 
+  bottom: '20px', 
+  padding: '10px 20px', 
+  borderRadius: '25px', 
+  border: 'none', 
+  background: 'white', 
+  color: '#000', 
+  fontWeight: 'bold', 
+  cursor: 'pointer', 
+  boxShadow: '0 2px 10px rgba(0,0,0,0.1)' 
+};
+
 const btnConfirm = { flex: 1, background: '#009c3b', color: 'white', border: 'none', padding: '12px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' };
 const btnCancel = { flex: 1, background: '#555', color: 'white', border: 'none', padding: '12px', borderRadius: '10px', cursor: 'pointer' };
 const formStyle = { display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' };
