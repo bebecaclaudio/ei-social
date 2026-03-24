@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom' // 1. Importar o hook de navegação
+import { useNavigate } from 'react-router-dom'
 import { db } from './firebase-config'
 import {
   collection, addDoc, onSnapshot, doc, 
@@ -7,12 +7,23 @@ import {
 } from 'firebase/firestore'
 
 function Comunidades({ usuario }) {
-  const navigate = useNavigate() // 2. Inicializar o navegador
+  const navigate = useNavigate()
   const [comunidades, setComunidades] = useState([])
   const [minhasComunidades, setMinhasComunidades] = useState([])
   const [criando, setCriando] = useState(false)
   const [busca, setBusca] = useState('')
   const [novaComunidade, setNovaComunidade] = useState({ nome: '', categoria: '', emoji: '' })
+
+  // --- FUNÇÃO AUXILIAR: Transforma "Nome da Comu" em "nome-da-comu" ---
+  const gerarSlug = (texto) => {
+    return texto
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "") // Remove acentos
+      .replace(/[^\w ]+/g, '')        // Remove símbolos especiais
+      .replace(/ +/g, '-')           // Troca espaços por traços
+      .trim();
+  };
 
   useEffect(() => {
     const q = query(collection(db, 'comunidades'), orderBy('dataCriacao', 'desc'))
@@ -41,9 +52,13 @@ function Comunidades({ usuario }) {
       return
     }
 
+    // Criamos o slug antes de salvar
+    const slugBonito = gerarSlug(novaComunidade.nome);
+
     try {
       const docRef = await addDoc(collection(db, 'comunidades'), {
         nome: novaComunidade.nome,
+        slug: slugBonito, // <--- SALVANDO O SLUG NO FIREBASE
         categoria: novaComunidade.categoria || 'Geral',
         emoji: novaComunidade.emoji || '👥',
         membrosCount: 1,
@@ -58,15 +73,15 @@ function Comunidades({ usuario }) {
       setNovaComunidade({ nome: '', categoria: '', emoji: '' })
       setCriando(false)
       
-      // Opcional: Navegar direto para a nova comunidade criada
-      navigate(`/comunidades/${docRef.id}`)
+      // Agora navegamos para a URL bonitinha
+      navigate(`/comunidades/${slugBonito}`)
     } catch (e) { 
       console.error("Erro ao salvar:", e)
     }
   }
 
   async function toggleParticipacao(e, id, jaParticipa) {
-    e.stopPropagation() // 3. IMPORTANTE: Impede que o clique no botão abra a página da comunidade
+    e.stopPropagation() 
     if (!usuario?.uid) return
     const userRef = doc(db, 'usuarios', usuario.uid)
     const comRef = doc(db, 'comunidades', id)
@@ -124,10 +139,13 @@ function Comunidades({ usuario }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '15px' }}>
         {filtradas.map(c => {
           const participando = minhasComunidades.includes(c.id)
+          // Se a comunidade já tem o campo slug, usamos ele. Se for antiga, usamos o id.
+          const urlDestino = c.slug || c.id;
+
           return (
             <div 
               key={c.id} 
-              onClick={() => navigate(`/comunidades/${c.id}`)} // 4. AÇÃO DE CLIQUE NO CARD
+              onClick={() => navigate(`/comunidades/${urlDestino}`)} 
               style={{ 
                 background: 'white', padding: '20px', borderRadius: '15px', 
                 border: participando ? '2px solid #009c3b' : '1px solid #ddd', 
@@ -141,7 +159,7 @@ function Comunidades({ usuario }) {
               <p style={{ fontSize: '12px', color: '#666', marginBottom: '15px' }}>{c.membrosCount || 0} membros</p>
               
               <button 
-                onClick={(e) => toggleParticipacao(e, c.id, participando)} // 5. Passando o evento 'e'
+                onClick={(e) => toggleParticipacao(e, c.id, participando)} 
                 style={{ 
                   width: '100%', padding: '8px', borderRadius: '6px', border: 'none',
                   background: participando ? '#f0f0f0' : '#002776',
