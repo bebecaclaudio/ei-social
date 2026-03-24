@@ -8,40 +8,50 @@ import {
 import { SidebarEsquerda, SidebarDireita } from './Sidebars'
 
 function PaginaComunidade({ usuario }) {
-  const { id } = useParams() // Captura o ID da URL
+  const { id } = useParams() // Agora o 'id' que vem da URL é o slug (ex: monarquistas-brasileiros)
   const navigate = useNavigate()
   const [comu, setComu] = useState(null)
   const [posts, setPosts] = useState([])
   const [novoPost, setNovoPost] = useState('')
 
-  // 1. Monitorar dados da Comunidade (Nome, Capa, Descrição)
+  // 1. MODIFICADO: Monitorar dados da Comunidade usando o SLUG
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, "comunidades", id), (docSnap) => {
-      if (docSnap.exists()) {
-        setComu({ id: docSnap.id, ...docSnap.data() })
+    // Criamos uma busca (query) onde o campo 'slug' seja igual ao 'id' da URL
+    const q = query(collection(db, "comunidades"), where("slug", "==", id));
+    
+    const unsub = onSnapshot(q, (snapshot) => {
+      if (!snapshot.empty) {
+        // Como o slug é único, pegamos o primeiro resultado [0]
+        const docSnap = snapshot.docs[0];
+        setComu({ id: docSnap.id, ...docSnap.data() });
+      } else {
+        // Se não achar nada, talvez seja um ID antigo (código aleatório)
+        // Opcional: tentar buscar por doc(db, "comunidades", id) aqui
       }
-    })
-    return () => unsub()
-  }, [id])
+    });
+    return () => unsub();
+  }, [id]);
 
-  // 2. Monitorar Posts desta comunidade específica
+  // 2. MODIFICADO: Monitorar Posts usando o ID REAL (comu.id)
   useEffect(() => {
+    if (!comu?.id) return; // Só busca posts quando a comunidade for encontrada
+
     const q = query(
       collection(db, "posts_comunidades"),
-      where("comunidadeId", "==", id),
+      where("comunidadeId", "==", comu.id), // Importante: usar comu.id e não o slug da URL
       orderBy("data", "desc")
     )
     const unsub = onSnapshot(q, (snap) => {
       setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     })
     return () => unsub()
-  }, [id])
+  }, [comu?.id]); // Monitora a mudança do objeto comu
 
   // 3. Função para Postar
   async function enviarPost() {
-    if (!novoPost.trim()) return
+    if (!novoPost.trim() || !comu?.id) return
     await addDoc(collection(db, "posts_comunidades"), {
-      comunidadeId: id,
+      comunidadeId: comu.id, // ID real do banco
       autorUid: usuario.uid,
       autorNome: usuario.displayName || "Membro",
       autorFoto: usuario.photoURL || "",
@@ -93,18 +103,24 @@ function PaginaComunidade({ usuario }) {
           </div>
         </div>
 
-        {posts.map(p => (
-          <div key={p.id} style={{ ...cardStyle, marginBottom: '15px' }}>
-            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <img src={p.autorFoto} style={avatarPost} alt="" />
-              <div>
-                <strong style={{ display: 'block' }}>{p.autorNome}</strong>
-                <small style={{ color: '#999' }}>{p.data?.toDate()?.toLocaleString()}</small>
+        {posts.length === 0 ? (
+          <p style={{textAlign: 'center', color: '#999', marginTop: '20px'}}>Nenhum post ainda. Seja o primeiro!</p>
+        ) : (
+          posts.map(p => (
+            <div key={p.id} style={{ ...cardStyle, marginBottom: '15px', marginTop: '15px' }}>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                <img src={p.autorFoto || 'https://via.placeholder.com/40'} style={avatarPost} alt="" />
+                <div>
+                  <strong style={{ display: 'block' }}>{p.autorNome}</strong>
+                  <small style={{ color: '#999' }}>
+                    {p.data?.toDate() ? p.data.toDate().toLocaleString() : 'Enviando...'}
+                  </small>
+                </div>
               </div>
+              <p style={{ marginTop: '15px', whiteSpace: 'pre-wrap' }}>{p.texto}</p>
             </div>
-            <p style={{ marginTop: '15px', whiteSpace: 'pre-wrap' }}>{p.texto}</p>
-          </div>
-        ))}
+          ))
+        )}
       </main>
 
       {/* COLUNA DIREITA: MEMBROS */}
@@ -122,7 +138,7 @@ function PaginaComunidade({ usuario }) {
   )
 }
 
-// --- ESTILOS ---
+// ... (Mantenha seus estilos abaixo como estão)
 const layoutGrid = { display: 'flex', gap: '20px', maxWidth: '1200px', margin: '0 auto', padding: '20px' };
 const cardStyle = { background: 'white', padding: '20px', borderRadius: '15px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' };
 const bannerEstilo = (cor) => ({ height: '100px', background: cor, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' });
