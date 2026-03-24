@@ -61,10 +61,26 @@ function Comunidades({ usuario }) {
       await updateDoc(userRef, {
         comunidadesInscritas: jaParticipa ? arrayRemove(id) : arrayUnion(id)
       })
+      const atual = comunidades.find(c => c.id === id)?.membrosCount || 0
       await updateDoc(comRef, {
-        membrosCount: jaParticipa ? Math.max(0, (comunidades.find(c => c.id === id)?.membrosCount || 1) - 1) : (comunidades.find(c => c.id === id)?.membrosCount || 0) + 1
+        membrosCount: jaParticipa ? Math.max(0, atual - 1) : atual + 1
       })
     } catch (e) { console.error(e) }
+  }
+
+  const inputStyle = {
+    width: '100%',
+    padding: '12px',
+    borderRadius: '10px',
+    border: '1px solid #ddd',
+    fontSize: '15px',
+    outline: 'none',
+    marginBottom: '12px',
+    color: '#111',
+    background: '#fff',
+    boxSizing: 'border-box',
+    WebkitTextFillColor: '#111',
+    WebkitBoxShadow: '0 0 0px 1000px #fff inset'
   }
 
   const filtradas = comunidades.filter(c =>
@@ -76,25 +92,17 @@ function Comunidades({ usuario }) {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
-      <style>{`
-        input:-webkit-autofill,
-        input:-webkit-autofill:hover,
-        input:-webkit-autofill:focus {
-          -webkit-box-shadow: 0 0 0px 1000px white inset !important;
-          -webkit-text-fill-color: #111 !important;
-        }
-      `}</style>
       <div style={{ maxWidth: '700px', margin: '24px auto', padding: '0 16px' }}>
 
-        {/* BUSCA E CRIAR */}
         <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
           <input
             placeholder="Buscar comunidade..."
             value={busca}
             onChange={e => setBusca(e.target.value)}
             style={{
-              flex: 1, padding: '12px 18px', borderRadius: '12px',
-              border: '2px solid #ddd', fontSize: '15px', outline: 'none', color: '#333'
+              ...inputStyle,
+              marginBottom: 0,
+              flex: 1
             }}
           />
           <button onClick={() => setCriando(!criando)} style={{
@@ -106,7 +114,6 @@ function Comunidades({ usuario }) {
           </button>
         </div>
 
-        {/* FORMULÁRIO CRIAR */}
         {criando && (
           <div style={{
             background: 'white', borderRadius: '16px', padding: '24px',
@@ -117,32 +124,23 @@ function Comunidades({ usuario }) {
             <input
               placeholder="Nome da comunidade *"
               value={novaComunidade.nome}
+              autoComplete="off"
               onChange={e => setNovaComunidade({ ...novaComunidade, nome: e.target.value })}
-              style={{
-                width: '100%', padding: '12px', borderRadius: '10px',
-                border: '1px solid #ddd', fontSize: '15px', outline: 'none',
-                marginBottom: '12px', color: '#333', boxSizing: 'border-box'
-              }}
+              style={inputStyle}
             />
             <input
               placeholder="Categoria (ex: Musica, Esportes...)"
               value={novaComunidade.categoria}
+              autoComplete="off"
               onChange={e => setNovaComunidade({ ...novaComunidade, categoria: e.target.value })}
-              style={{
-                width: '100%', padding: '12px', borderRadius: '10px',
-                border: '1px solid #ddd', fontSize: '15px', outline: 'none',
-                marginBottom: '12px', color: '#333', boxSizing: 'border-box'
-              }}
+              style={inputStyle}
             />
             <input
               placeholder="Emoji (ex: 🎸)"
               value={novaComunidade.emoji}
+              autoComplete="off"
               onChange={e => setNovaComunidade({ ...novaComunidade, emoji: e.target.value })}
-              style={{
-                width: '100%', padding: '12px', borderRadius: '10px',
-                border: '1px solid #ddd', fontSize: '15px', outline: 'none',
-                marginBottom: '16px', color: '#333', boxSizing: 'border-box'
-              }}
+              style={inputStyle}
             />
             <button onClick={criarComunidade} style={{
               width: '100%', padding: '12px', borderRadius: '10px', border: 'none',
@@ -152,7 +150,6 @@ function Comunidades({ usuario }) {
           </div>
         )}
 
-        {/* MINHAS COMUNIDADES */}
         {minhas.length > 0 && (
           <>
             <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#002776', marginBottom: '12px' }}>
@@ -180,7 +177,6 @@ function Comunidades({ usuario }) {
           </>
         )}
 
-        {/* DESCOBRIR */}
         <h2 style={{ fontSize: '18px', fontWeight: '800', color: '#002776', marginBottom: '12px' }}>
           Descobrir Comunidades
         </h2>
