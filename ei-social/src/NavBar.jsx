@@ -40,15 +40,19 @@ function NavBar({ usuario, telaAtual, onFeed, onComunidades, onPerfil, onNotific
         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
           <button onClick={onNotificacoes} style={iconBtnStyle}>🔔</button>
           
-          {/* CÍRCULO DO AVATAR NA NAVBAR */}
+          {/* CÍRCULO DO AVATAR NA NAVBAR (VERSÃO BLINDADA) */}
           <div onClick={onPerfil} style={avatarStyle}>
-            {ehLink(fotoExibir) ? (
+            {/* Tentamos renderizar a imagem se houver QUALQUER link válido */}
+            {(fotoExibir || usuario?.photoURL) ? (
               <img 
-                src={fotoExibir} 
+                src={fotoExibir || usuario?.photoURL} 
                 alt="" 
+                // O segredo está em garantir que o erro de carregamento não trave a UI
+                onError={(e) => { e.target.style.display = 'none'; }} 
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
               />
             ) : (
+              /* Se realmente não houver nada, aí sim mostramos o ícone */
               <span style={{ fontSize: '18px' }}>👤</span>
             )}
           </div>
