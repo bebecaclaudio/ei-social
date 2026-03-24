@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
-import { db } from './firebase-config'
+import { db, storage } from './firebase-config' // Certifique-se de exportar 'storage' no seu config
 import { doc, getDoc, setDoc } from 'firebase/firestore'
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 
 function Perfil({ usuario }) {
   const [carregando, setCarregando] = useState(true)
   const [editando, setEditando] = useState(false)
   const [menuFoto, setMenuFoto] = useState(false)
+  const [subindoFoto, setSubindoFoto] = useState(false) // Estado para o loading da foto
   const LIMITE_BIO = 160
 
   const [dadosPerfil, setDadosPerfil] = useState({
@@ -50,6 +52,41 @@ function Perfil({ usuario }) {
     carregarDados()
   }, [usuario])
 
+  // FUNÇÃO DE UPLOAD REAL PARA O STORAGE
+  async function handleFotoUpload(e) {
+    const file = e.target.files[0]
+    if (!file || !usuario?.uid) return
+    
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Imagem muito grande! Máximo 2MB.')
+      return
+    }
+
+    try {
+      setSubindoFoto(true)
+      // 1. Criar a referência no Storage (Pasta usuarios / id do usuario / perfil.png)
+      const storageRef = ref(storage, `usuarios/${usuario.uid}/perfil.png`)
+      
+      // 2. Fazer o upload do arquivo
+      await uploadBytes(storageRef, file)
+      
+      // 3. Pegar a URL pública gerada
+      const urlGeral = await getDownloadURL(storageRef)
+      
+      // 4. Atualizar o estado e o banco de dados imediatamente para a foto "não sumir"
+      setFoto(urlGeral)
+      await setDoc(doc(db, 'usuarios', usuario.uid), { foto: urlGeral }, { merge: true })
+      
+      setMenuFoto(false)
+      alert('Foto atualizada!')
+    } catch (error) {
+      console.error("Erro no upload:", error)
+      alert('Erro ao subir a imagem.')
+    } finally {
+      setSubindoFoto(false)
+    }
+  }
+
   async function salvarAlteracoes() {
     if (!usuario?.uid) return
     if (dadosPerfil.bio.length > LIMITE_BIO) {
@@ -59,7 +96,7 @@ function Perfil({ usuario }) {
     try {
       await setDoc(doc(db, 'usuarios', usuario.uid), { 
         ...dadosPerfil, 
-        foto,
+        foto, // Aqui salvamos a URL que veio do Storage
         uid: usuario.uid,
         ultimaAtualizacao: new Date()
       }, { merge: true })
@@ -69,23 +106,6 @@ function Perfil({ usuario }) {
       console.error(error)
       alert('Erro ao salvar no banco de dados.')
     }
-  }
-
-  function handleFotoUpload(e) {
-    const file = e.target.files[0]
-    if (!file) return
-    
-    if (file.size > 2 * 1024 * 1024) {
-      alert('Imagem muito grande! Máximo 2MB.')
-      return
-    }
-
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      setFoto(ev.target.result)
-      setMenuFoto(false)
-    }
-    reader.readAsDataURL(file)
   }
 
   if (carregando) return (
@@ -120,11 +140,12 @@ function Perfil({ usuario }) {
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: '50px'
           }}>
-            {foto ? (
+            {subindoFoto ? (
+               <span style={{ fontSize: '14px', color: '#666' }}>Subindo...</span>
+            ) : foto ? (
               <img src={foto} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : '👤'}
 
-            {/* OVERLAY DE CAMERA (SÓ APARECE NO HOVER) */}
             <div
               onClick={() => setMenuFoto(!menuFoto)}
               style={{
@@ -140,7 +161,6 @@ function Perfil({ usuario }) {
             </div>
           </div>
 
-          {/* MENU DE OPÇÕES DA FOTO */}
           {menuFoto && (
             <div style={{
               position: 'absolute', top: '130px', left: '50%',
@@ -155,20 +175,9 @@ function Perfil({ usuario }) {
                 background: '#eef2ff', color: '#002776', fontWeight: '600',
                 cursor: 'pointer', textAlign: 'center'
               }}>
-                Nova Foto
-                <input type="file" accept="image/*" onChange={handleFotoUpload} style={{ display: 'none' }} />
+                {subindoFoto ? 'Enviando...' : 'Nova Foto'}
+                <input type="file" accept="image/*" onChange={handleFotoUpload} style={{ display: 'none' }} disabled={subindoFoto} />
               </label>
-              
-              {foto && (
-                <button
-                  onClick={() => { setFoto(''); setMenuFoto(false) }}
-                  style={{
-                    fontSize: '13px', padding: '10px', borderRadius: '8px',
-                    border: 'none', background: '#fff0f0', color: '#e00',
-                    fontWeight: '600', cursor: 'pointer'
-                  }}
-                >Remover</button>
-              )}
               
               <button
                 onClick={() => setMenuFoto(false)}
@@ -193,50 +202,31 @@ function Perfil({ usuario }) {
         </button>
       </div>
 
-      {/* INFO USUARIO */}
       <div style={{ textAlign: 'center', marginTop: '70px', padding: '0 20px' }}>
-        
         {editando ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
             <input
               placeholder="Seu nome"
               value={dadosPerfil.nome}
               onChange={(e) => setDadosPerfil({ ...dadosPerfil, nome: e.target.value })}
-              style={{
-                fontSize: '18px', padding: '10px', borderRadius: '8px',
-                border: '1px solid #ccc', width: '100%', maxWidth: '300px', textAlign: 'center'
-              }}
+              style={{ fontSize: '18px', padding: '10px', borderRadius: '8px', border: '1px solid #ccc', width: '100%', maxWidth: '300px', textAlign: 'center' }}
             />
             <input
-              placeholder="Sua cidade (ex: São Paulo - SP)"
+              placeholder="Sua cidade"
               value={dadosPerfil.local}
               onChange={(e) => setDadosPerfil({ ...dadosPerfil, local: e.target.value })}
-              style={{
-                fontSize: '14px', padding: '10px', borderRadius: '8px',
-                border: '1px solid #ccc', width: '100%', maxWidth: '300px', textAlign: 'center'
-              }}
+              style={{ fontSize: '14px', padding: '10px', borderRadius: '8px', border: '1px solid #ccc', width: '100%', maxWidth: '300px', textAlign: 'center' }}
             />
             <textarea
-              placeholder="Escreva sua bio..."
+              placeholder="Sua bio..."
               maxLength={LIMITE_BIO}
               value={dadosPerfil.bio}
               onChange={(e) => setDadosPerfil({ ...dadosPerfil, bio: e.target.value })}
-              style={{
-                width: '100%', maxWidth: '300px', height: '100px', padding: '10px',
-                borderRadius: '8px', border: '1px solid #ccc', resize: 'none'
-              }}
+              style={{ width: '100%', maxWidth: '300px', height: '100px', padding: '10px', borderRadius: '8px', border: '1px solid #ccc', resize: 'none' }}
             />
-            <div style={{ fontSize: '11px', color: dadosPerfil.bio.length >= LIMITE_BIO ? 'red' : '#888' }}>
-              {dadosPerfil.bio.length} / {LIMITE_BIO}
-            </div>
-            
             <button
               onClick={salvarAlteracoes}
-              style={{
-                background: '#009c3b', color: 'white', border: 'none',
-                padding: '12px 40px', borderRadius: '25px', fontWeight: 'bold',
-                cursor: 'pointer', marginTop: '10px', fontSize: '16px'
-              }}
+              style={{ background: '#009c3b', color: 'white', border: 'none', padding: '12px 40px', borderRadius: '25px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px', fontSize: '16px' }}
             >
               Salvar Alterações
             </button>
@@ -244,13 +234,8 @@ function Perfil({ usuario }) {
         ) : (
           <>
             <h2 style={{ fontSize: '24px', margin: '0 0 5px', color: '#1a1a1a' }}>{dadosPerfil.nome}</h2>
-            {dadosPerfil.local && (
-              <p style={{ margin: '0 0 15px', color: '#666', fontSize: '14px' }}>📍 {dadosPerfil.local}</p>
-            )}
-            <p style={{ 
-              maxWidth: '450px', margin: '0 auto', color: '#444', 
-              lineHeight: '1.5', fontSize: '15px', whiteSpace: 'pre-wrap' 
-            }}>
+            {dadosPerfil.local && ( <p style={{ margin: '0 0 15px', color: '#666', fontSize: '14px' }}>📍 {dadosPerfil.local}</p> )}
+            <p style={{ maxWidth: '450px', margin: '0 auto', color: '#444', lineHeight: '1.5', fontSize: '15px', whiteSpace: 'pre-wrap' }}>
               {dadosPerfil.bio || 'Nenhuma biografia definida.'}
             </p>
           </>
