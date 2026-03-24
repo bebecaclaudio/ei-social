@@ -7,16 +7,15 @@ import Cadastro from './Cadastro'
 import Feed from './Feed'
 import Perfil from './Perfil'
 import Comunidades from './Comunidades'
+import PaginaComunidade from './PaginaComunidade' // Novo componente
+import GerenciarComunidade from './GerenciarComunidade' // Novo componente
 import Layout from './Layout'
 
 function Spinner() {
   return (
     <div style={{
-      minHeight: '100vh',
-      background: '#f0f2f5',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center'
+      minHeight: '100vh', background: '#f0f2f5', display: 'flex',
+      alignItems: 'center', justifyContent: 'center'
     }}>
       <div style={{
         width: '44px', height: '44px', borderRadius: '50%',
@@ -56,7 +55,6 @@ function App() {
   return (
     <Router>
       <Routes>
-
         <Route path="/" element={
           carregando ? <Spinner /> :
           usuario ? <Navigate to="/feed" replace /> :
@@ -85,21 +83,38 @@ function App() {
           </RotaPrivada>
         } />
 
-        {/* --- ROTA CORRIGIDA ABAIXO --- */}
         <Route path="/comunidades" element={
           <RotaPrivada usuario={usuario} carregando={carregando}>
             <Layout usuario={usuario} onSair={sair}>
-              {/* Agora passamos o objeto usuario para as Comunidades poderem usar o UID */}
               <Comunidades usuario={usuario} /> 
             </Layout>
           </RotaPrivada>
         } />
 
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {/* --- NOVAS ROTAS DINÂMICAS --- */}
+        
+        {/* Página Interna da Comunidade (Onde ficam os posts e membros) */}
+        <Route path="/comunidade/:id" element={
+          <RotaPrivada usuario={usuario} carregando={carregando}>
+            <Layout usuario={usuario} onSair={sair}>
+              <PaginaComunidade usuario={usuario} />
+            </Layout>
+          </RotaPrivada>
+        } />
 
+        {/* Página de Gerenciamento (Restrita ao dono/adm) */}
+        <Route path="/comunidade/:id/gerenciar" element={
+          <RotaPrivada usuario={usuario} carregando={carregando}>
+            <Layout usuario={usuario} onSair={sair}>
+              <GerenciarComunidade usuario={usuario} />
+            </Layout>
+          </RotaPrivada>
+        } />
+
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   )
 }
 
-export default App
+export default App;
