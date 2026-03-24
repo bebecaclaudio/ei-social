@@ -1,33 +1,39 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { db } from './firebase-config'
 import { 
   doc, onSnapshot, collection, query, where, orderBy, 
-  addDoc, serverTimestamp, getDoc, updateDoc, arrayUnion, arrayRemove 
+  addDoc, serverTimestamp, updateDoc, deleteDoc, arrayUnion, arrayRemove 
 } from 'firebase/firestore'
 import { SidebarEsquerda, SidebarDireita } from './Sidebars'
 
-// --- AVATAR COM SINCRO EM TEMPO REAL ---
-function AvatarAutor({ uid, fallbackFoto, tamanho = '42px' }) {
-  const [fotoUrl, setFotoUrl] = useState(null)
-  useEffect(() => {
-    if (!uid) return
-    return onSnapshot(doc(db, "usuarios", uid), (d) => {
-      if (d.exists()) setFotoUrl(d.data().foto)
-    })
-  }, [uid])
-
-  return (
-    <div style={{ width: tamanho, height: tamanho, borderRadius: '50%', overflow: 'hidden', background: '#f0f0f0', flexShrink: 0, border: '1px solid #eee' }}>
-      <img src={fotoUrl || fallbackFoto || 'https://via.placeholder.com/40'} style={{width:'100%', height:'100%', objectFit:'cover'}} alt="" />
-    </div>
-  )
+// --- UTILS: FORMATAÇÃO DE TEMPO ---
+const formatarDataTwitter = (dataFirestore) => {
+  if (!dataFirestore) return 'Sincronizando...';
+  const data = dataFirestore.toDate();
+  
+  // Ex: 3:45 PM
+  const hora = data.toLocaleTimeString('en-US', { 
+    hour: 'numeric', 
+    minute: '2-digit', 
+    hour12: true 
+  });
+  
+  // Ex: 24 de mar de 2026
+  const dataExtenso = data.toLocaleDateString('pt-BR', { 
+    day: 'numeric', 
+    month: 'short', 
+    year: 'numeric' 
+  });
+  
+  return `${hora} · ${dataExtenso}`;
 }
 
 function PaginaComunidade({ usuario }) {
   const { id } = useParams() 
   const navigate = useNavigate()
   
+  // Estados Principais
   const [comu, setComu] = useState(null)
   const [posts, setPosts] = useState([])
   const [novoPost, setNovoPost] = useState('')
@@ -37,111 +43,173 @@ function PaginaComunidade({ usuario }) {
   
   const isMobile = larguraJanela < 768
 
+  // Listener de Redimensionamento
   useEffect(() => {
     const handleResize = () => setLarguraJanela(window.innerWidth)
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
+  // Buscar Dados da Comunidade (Real-time)
   useEffect(() => {
     const q = query(collection(db, "comunidades"), where("slug", "==", id))
     return onSnapshot(q, (snapshot) => {
-      if (!snapshot.empty) setComu({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() })
+      if (!snapshot.empty) {
+        setComu({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() })
+      }
     })
   }, [id])
 
+  // Buscar Posts da Comunidade (Real-time)
   useEffect(() => {
     if (!comu?.id) return
-    const q = query(collection(db, "posts_comunidades"), where("comunidadeId", "==", comu.id), orderBy("data", "desc"))
+    const q = query(
+      collection(db, "posts_comunidades"), 
+      where("comunidadeId", "==", comu.id), 
+      orderBy("data", "desc")
+    )
     return onSnapshot(q, (snap) => {
       setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     })
   }, [comu?.id])
 
-  const eAutor = comu?.criadoPor === usuario?.uid
+  // --- LÓGICA DE INTERAÇÃO ---
 
   async function enviarPost() {
-    if (!novoPost.trim() || !comu?.id || !usuario?.uid || enviando) return
+    if (!novoPost.trim() || !comu?.id || !usuario?.uid) return
     setEnviando(true)
-    await addDoc(collection(db, "posts_comunidades"), {
-      comunidadeId: comu.id,
-      autorUid: usuario.uid,
-      autorNome: usuario.displayName || "Membro",
-      autorFoto: usuario.foto || usuario.photoURL || "",
-      texto: novoPost,
-      data: serverTimestamp(),
-      curtidas: [],
-      reposts: [],
-      comentariosCount: 0
-    })
-    setNovoPost('')
-    setEnviando(false)
+    try {
+      await addDoc(collection(db, "posts_comunidades"), {
+        comunidadeId: comu.id,
+        autorUid: usuario.uid,
+        autorNome: usuario.displayName || "Membro",
+        autorFoto: usuario.photoURL || "",
+        texto: novoPost,
+        data: serverTimestamp(),
+        curtidas: [],
+        reposts: [],
+        comentariosCount: 0
+      })
+      setNovoPost('')
+    } catch (err) {
+      console.error("Erro ao fragmentar:", err)
+    } finally {
+      setEnviando(false)
+    }
   }
 
-  if (!comu) return <div style={msgAviso}>Conectando à rede...</div>
+  async function salvarRascunho() {
+    if (!novoPost.trim() || !usuario?.uid) return
+    try {
+      await addDoc(collection(db, "rascunhos"), {
+        usuarioUid: usuario.uid,
+        texto: novoPost,
+        data: serverTimestamp()
+      })
+      setNovoPost('')
+      alert("Fragmento guardado nos rascunhos! ✍️")
+    } catch (err) {
+      alert("Erro ao salvar rascunho.")
+    }
+  }
+
+  const toggleLike = async (pId, lista) => {
+    if (!usuario?.uid) return
+    const ref = doc(db, "posts_comunidades", pId)
+    const jaCurtiu = lista?.includes(usuario.uid)
+    await updateDoc(ref, { 
+      curtidas: jaCurtiu ? arrayRemove(usuario.uid) : arrayUnion(usuario.uid) 
+    })
+  }
+
+  const excluirPost = async (pId) => {
+    if (window.confirm("Deseja apagar este fragmento permanentemente?")) {
+      await deleteDoc(doc(db, "posts_comunidades", pId))
+    }
+  }
+
+  const editarPost = async (pId, textoAntigo) => {
+    const novoTexto = window.prompt("Edite seu fragmento:", textoAntigo)
+    if (novoTexto && novoTexto !== textoAntigo) {
+      await updateDoc(doc(db, "posts_comunidades", pId), { texto: novoTexto })
+    }
+  }
+
+  if (!comu) return <div style={msgAviso}>Sincronizando com a Pleiadians...</div>
+
+  const isOwner = comu.criadoPor === usuario?.uid
 
   return (
     <div style={containerPrincipal}>
-      {/* HEADER DINÂMICO */}
+      {/* HEADER / BANNER */}
       <div style={bannerHeroStyle(comu.capaUrl || comu.corCapa || '#002776', isMobile)}>
         <div style={iconeBannerWrapper(isMobile)}>{comu.emoji || '✨'}</div>
       </div>
 
-      {/* NAVEGAÇÃO MOBILE (3 ABAS) */}
+      {/* NAVEGAÇÃO MOBILE */}
       {isMobile && (
         <div style={tabContainer}>
           <button onClick={() => setAbaAtiva('feed')} style={abaAtiva === 'feed' ? tabAtiva : tabInativa}>Feed</button>
           <button onClick={() => setAbaAtiva('sobre')} style={abaAtiva === 'sobre' ? tabAtiva : tabInativa}>Sobre</button>
-          {eAutor && (
-            <button onClick={() => setAbaAtiva('gestao')} style={abaAtiva === 'gestao' ? tabAtivaGestao : tabInativa}>Gestão ⚙️</button>
-          )}
+          <button onClick={() => setAbaAtiva('membros')} style={abaAtiva === 'membros' ? tabAtiva : tabInativa}>Membros</button>
         </div>
       )}
 
       <div style={layoutGrid(isMobile)}>
         
-        {/* COLUNA 1: SIDEBAR ESQUERDA (Desktop) */}
+        {/* COLUNA ESQUERDA (DESKTOP) */}
         {!isMobile && (
           <SidebarEsquerda>
             <div style={cardStyle}>
               <h2 style={sTitle}>{comu.nome}</h2>
               <span style={badgeStyle}>{comu.categoria}</span>
               <p style={descricaoTexto}>{comu.descricao}</p>
-              {eAutor && (
-                <button onClick={() => navigate(`/comunidades/${id}/gerenciar`)} style={btnAdmin}>Painel do Criador</button>
+              {isOwner && (
+                <button onClick={() => navigate(`/comunidades/${id}/gerenciar`)} style={btnAmareloConfig}>
+                  ⚙️ Configurações
+                </button>
               )}
             </div>
           </SidebarEsquerda>
         )}
 
-        {/* COLUNA 2: CONTEÚDO PRINCIPAL */}
-        <main style={{ flex: isMobile ? '1 1 100%' : '1', minWidth: '0' }}>
-          
-          {/* FEED */}
+        {/* FEED CENTRAL */}
+        <main style={{ flex: 1, minWidth: '0' }}>
           {(abaAtiva === 'feed' || !isMobile) && (
             <>
+              {/* COMPOSITOR DE POST */}
               <div style={cardPostar}>
-                <AvatarAutor uid={usuario?.uid} fallbackFoto={usuario?.photoURL} />
-                <div style={{flex: 1}}>
-                  <textarea 
-                    placeholder="Partilhe um fragmento de ideia..."
-                    value={novoPost} onChange={(e) => setNovoPost(e.target.value)} 
-                    style={textareaStyle}
-                  />
-                  <div style={{display: 'flex', justifyContent: 'flex-end', marginTop: '10px'}}>
-                    <button onClick={enviarPost} style={btnPostar}>Fragmentar</button>
-                  </div>
+                <textarea 
+                  placeholder="O que você está concatenando?"
+                  value={novoPost} 
+                  onChange={(e) => setNovoPost(e.target.value)} 
+                  style={textareaStyle}
+                />
+                <div style={barraBotoesPostar}>
+                  <button onClick={salvarRascunho} style={btnRascunho}>Salvar Rascunho</button>
+                  <button onClick={enviarPost} style={btnPostar} disabled={enviando}>
+                    {enviando ? 'Enviando...' : 'Fragmentar'}
+                  </button>
                 </div>
               </div>
 
+              {/* LISTA DE POSTS */}
               {posts.map(p => (
                 <article key={p.id} style={postCardStyle}>
                   <div style={headerPost}>
-                    <AvatarAutor uid={p.autorUid} fallbackFoto={p.autorFoto} />
-                    <div>
-                      <strong style={nomeAutor}>{p.autorNome}</strong>
-                      <small style={dataPost}>{p.data?.toDate()?.toLocaleDateString()}</small>
+                    <div style={{display: 'flex', gap: '12px', alignItems: 'center'}}>
+                      <img src={p.autorFoto || 'https://via.placeholder.com/40'} style={avatarMini} alt="" />
+                      <div>
+                        <strong style={nomeAutor}>{p.autorNome}</strong>
+                        <small style={dataPostEstilo}>{formatarDataTwitter(p.data)}</small>
+                      </div>
                     </div>
+                    {p.autorUid === usuario?.uid && (
+                      <div style={{display: 'flex', gap: '8px'}}>
+                        <button onClick={() => editarPost(p.id, p.texto)} style={btnIconeMini}>✏️</button>
+                        <button onClick={() => excluirPost(p.id)} style={btnIconeMiniRed}>🗑️</button>
+                      </div>
+                    )}
                   </div>
                   
                   <Link to={`/post/${p.id}`} style={linkPost}>
@@ -149,92 +217,68 @@ function PaginaComunidade({ usuario }) {
                   </Link>
 
                   <div style={barraInteracao}>
-                    <button style={btnAcao}>🤍 {p.curtidas?.length || 0}</button>
-                    <Link to={`/post/${p.id}`} style={btnAcao}>💬 {p.comentariosCount || 0}</Link>
-                    <button style={btnAcao}>🔄</button>
-                    <button style={btnAcao}>🔗</button>
+                    <button onClick={() => toggleLike(p.id, p.curtidas)} style={btnAcao(p.curtidas?.includes(usuario?.uid), '#ff4b4b')}>
+                      {p.curtidas?.includes(usuario?.uid) ? '❤️' : '🤍'} {p.curtidas?.length || 0}
+                    </button>
+                    <Link to={`/post/${p.id}`} style={btnAcao(false, '#002776')}>💬 {p.comentariosCount || 0}</Link>
+                    <button style={btnAcao(false, '#009c3b')}>🔄</button>
+                    <button onClick={() => alert("Salvo!")} style={btnAcao(false, '#f1c40f')}>🔖</button>
+                    <button onClick={() => {navigator.clipboard.writeText(`${window.location.origin}/post/${p.id}`); alert("Link copiado!")}} style={btnAcao(false, '#3498db')}>🔗</button>
                   </div>
                 </article>
               ))}
             </>
           )}
 
-          {/* ABA SOBRE & MEMBROS (Mobile) */}
+          {/* CONTEÚDO ABAS MOBILE */}
           {isMobile && abaAtiva === 'sobre' && (
-            <div style={cardStyle}>
-              <h2 style={sTitle}>Sobre a Comunidade</h2>
-              <p style={descricaoTexto}>{comu.descricao}</p>
-              <div style={divisor} />
-              <h4>Membros Ativos ({comu.membrosCount || 1})</h4>
-              <div style={gridMembros}>
-                <AvatarAutor uid={usuario?.uid} fallbackFoto={usuario?.photoURL} />
-              </div>
-            </div>
+            <div style={cardStyle}><h2>Sobre</h2><p>{comu.descricao}</p></div>
           )}
-
-          {/* ABA GESTÃO (Apenas Mobile para o Autor) */}
-          {isMobile && abaAtiva === 'gestao' && (
-            <div style={cardStyle}>
-              <h2 style={{color: '#d32f2f', fontSize: '20px'}}>Centro de Comando</h2>
-              <p style={descricaoTexto}>Controle as permissões e a alma da sua comunidade.</p>
-              
-              <div style={listaGestao}>
-                <button onClick={() => navigate(`/comunidades/${id}/editar`)} style={itemGestao}>✏️ Editar Perfil e Cores</button>
-                <button style={itemGestao}>👥 Gerir Moderadores</button>
-                <button style={itemGestao}>🚫 Membros Banidos</button>
-                <button style={itemGestao}>📊 Estatísticas de Crescimento</button>
-              </div>
-            </div>
+          {isMobile && abaAtiva === 'membros' && (
+            <div style={cardStyle}><h2>Membros</h2><p>Lista de membros em breve...</p></div>
           )}
         </main>
 
-        {/* COLUNA 3: SIDEBAR DIREITA (Desktop) */}
+        {/* COLUNA DIREITA (DESKTOP) */}
         {!isMobile && (
           <SidebarDireita>
-            <div style={cardStyle}>
-              <h4 style={sSubTitle}>Exploradores</h4>
-              <div style={gridMembros}>
-                <AvatarAutor uid={usuario?.uid} fallbackFoto={usuario?.photoURL} tamanho="35px" />
-              </div>
-            </div>
+            <div style={cardStyle}><h4>Membros</h4></div>
           </SidebarDireita>
         )}
-
       </div>
     </div>
   )
 }
 
-// --- DESIGN SYSTEM (SOPHISTICATED) ---
+// --- SISTEMA DE ESTILOS (CSS-IN-JS) ---
 const containerPrincipal = { maxWidth: '1200px', margin: '0 auto', padding: '0 15px' };
-const bannerHeroStyle = (c, m) => ({ width: '100%', height: m ? '160px' : '300px', background: c?.startsWith('http') ? `url(${c}) center/cover` : c, borderRadius: m ? '0' : '0 0 30px 30px', position: 'relative' });
-const iconeBannerWrapper = (m) => ({ width: m ? '70px' : '100px', height: m ? '70px' : '100px', background: 'white', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: m ? '35px' : '50px', position: 'absolute', bottom: '-35px', left: m ? '50%' : '40px', transform: m ? 'translateX(-50%)' : 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' });
-const layoutGrid = (m) => ({ display: 'flex', gap: '30px', marginTop: m ? '60px' : '40px', paddingBottom: '100px' });
-const cardStyle = { background: 'white', padding: '25px', borderRadius: '22px', border: '1px solid #f0f0f0', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' };
+const bannerHeroStyle = (c, m) => ({ width: '100%', height: m ? '160px' : '280px', background: c?.startsWith('http') ? `url(${c}) center/cover` : c, borderRadius: m ? '0' : '0 0 30px 30px', position: 'relative' });
+const iconeBannerWrapper = (m) => ({ width: m ? '70px' : '100px', height: m ? '70px' : '100px', background: 'white', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: m ? '35px' : '50px', position: 'absolute', bottom: '-35px', left: m ? '50%' : '40px', transform: m ? 'translateX(-50%)' : 'none', boxShadow: '0 8px 20px rgba(0,0,0,0.1)' });
+const layoutGrid = (m) => ({ display: 'flex', gap: '25px', marginTop: m ? '60px' : '40px', paddingBottom: '100px' });
+const cardStyle = { background: 'white', padding: '24px', borderRadius: '22px', border: '1px solid #f2f2f2' };
 const postCardStyle = { ...cardStyle, marginBottom: '20px' };
-const cardPostar = { ...cardStyle, display: 'flex', gap: '15px', marginBottom: '30px' };
-const sTitle = { fontSize: '24px', fontWeight: '800', color: '#1a1a1a', marginBottom: '8px' };
-const badgeStyle = { background: '#f0f4ff', color: '#002776', padding: '6px 14px', borderRadius: '20px', fontSize: '11px', fontWeight: 'bold' };
-const descricaoTexto = { color: '#666', lineHeight: '1.6', fontSize: '14px', marginTop: '12px' };
-const btnAdmin = { width: '100%', marginTop: '20px', padding: '12px', borderRadius: '14px', border: 'none', background: '#002776', color: 'white', fontWeight: 'bold', cursor: 'pointer' };
-const textareaStyle = { width: '100%', border: 'none', outline: 'none', fontSize: '16px', resize: 'none', minHeight: '60px', background: 'transparent' };
-const btnPostar = { background: '#009c3b', color: 'white', border: 'none', padding: '10px 25px', borderRadius: '25px', fontWeight: 'bold' };
-const barraInteracao = { display: 'flex', justifyContent: 'space-between', marginTop: '18px', borderTop: '1px solid #f9f9f9', paddingTop: '15px' };
-const btnAcao = { background: 'none', border: 'none', color: '#888', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', textDecoration: 'none' };
-const tabContainer = { display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '50px', padding: '0 10px' };
-const tabAtiva = { flex: 1, padding: '12px', border: 'none', background: 'none', borderBottom: '3px solid #002776', fontWeight: 'bold', color: '#002776' };
-const tabAtivaGestao = { ...tabAtiva, borderBottomColor: '#d32f2f', color: '#d32f2f' };
-const tabInativa = { flex: 1, padding: '12px', border: 'none', background: 'none', color: '#999' };
-const itemGestao = { width: '100%', padding: '15px', textAlign: 'left', background: '#f8f9fa', border: '1px solid #eee', borderRadius: '12px', marginBottom: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' };
-const listaGestao = { marginTop: '25px' };
-const divisor = { margin: '20px 0', border: '0.5px solid #eee' };
-const gridMembros = { display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '15px' };
-const headerPost = { display: 'flex', gap: '12px', alignItems: 'center' };
-const nomeAutor = { color: '#1a1a1a', fontWeight: '700' };
-const dataPost = { color: '#bbb', fontSize: '12px', display: 'block' };
+const cardPostar = { ...cardStyle, marginBottom: '25px' };
+const btnAmareloConfig = { width: '100%', marginTop: '20px', padding: '12px', borderRadius: '12px', background: '#FFD700', color: '#000', fontWeight: '900', border: 'none', cursor: 'pointer' };
+const textareaStyle = { width: '100%', border: 'none', outline: 'none', fontSize: '16px', resize: 'none', minHeight: '90px', fontFamily: 'inherit' };
+const barraBotoesPostar = { display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' };
+const btnPostar = { background: '#002776', color: 'white', border: 'none', padding: '10px 25px', borderRadius: '25px', fontWeight: 'bold', cursor: 'pointer' };
+const btnRascunho = { background: '#f5f5f5', color: '#666', border: 'none', padding: '10px 20px', borderRadius: '25px', fontWeight: 'bold', cursor: 'pointer' };
+const barraInteracao = { display: 'flex', justifyContent: 'space-between', marginTop: '16px', borderTop: '1px solid #fcfcfc', paddingTop: '12px' };
+const btnAcao = (ativo, cor) => ({ background: 'none', border: 'none', cursor: 'pointer', color: ativo ? cor : '#999', display: 'flex', alignItems: 'center', gap: '6px', fontSize: '15px', textDecoration: 'none' });
+const avatarMini = { width: '42px', height: '42px', borderRadius: '50%', objectFit: 'cover' };
+const headerPost = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' };
+const nomeAutor = { color: '#1a1a1a', fontWeight: '800', display: 'block' };
+const dataPostEstilo = { color: '#777', fontSize: '12px', fontWeight: '400' };
+const corpoPost = { fontSize: '16px', color: '#333', lineHeight: '1.6', marginTop: '8px' };
 const linkPost = { textDecoration: 'none', color: 'inherit' };
-const corpoPost = { marginTop: '15px', color: '#333', lineHeight: '1.6' };
-const sSubTitle = { fontSize: '14px', color: '#999', textTransform: 'uppercase', letterSpacing: '1px' };
-const msgAviso = { padding: '100px', textAlign: 'center' };
+const btnIconeMini = { background: 'none', border: 'none', cursor: 'pointer', opacity: 0.4, fontSize: '14px' };
+const btnIconeMiniRed = { ...btnIconeMini, color: 'red' };
+const sTitle = { fontSize: '22px', fontWeight: '900', color: '#002776' };
+const badgeStyle = { background: '#eef2ff', color: '#002776', padding: '6px 14px', borderRadius: '16px', fontSize: '11px', fontWeight: '900' };
+const descricaoTexto = { color: '#555', fontSize: '14px', marginTop: '12px', lineHeight: '1.5' };
+const tabContainer = { display: 'flex', justifyContent: 'center', gap: '20px', marginTop: '45px' };
+const tabAtiva = { border: 'none', background: 'none', borderBottom: '3px solid #002776', padding: '10px', fontWeight: 'bold', color: '#002776' };
+const tabInativa = { border: 'none', background: 'none', padding: '10px', color: '#999' };
+const msgAviso = { padding: '100px', textAlign: 'center', color: '#002776', fontWeight: 'bold' };
 
 export default PaginaComunidade;
