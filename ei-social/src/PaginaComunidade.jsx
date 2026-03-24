@@ -15,7 +15,7 @@ function PaginaComunidade({ usuario }) {
   const [novoPost, setNovoPost] = useState('')
   const [carregando, setCarregando] = useState(true)
 
-  // --- RESPONSIVIDADE ---
+  // --- LÓGICA DE RESPONSIVIDADE EM TEMPO REAL ---
   const [larguraJanela, setLarguraJanela] = useState(window.innerWidth)
   const isMobile = larguraJanela < 768
 
@@ -29,19 +29,29 @@ function PaginaComunidade({ usuario }) {
   useEffect(() => {
     setCarregando(true)
     const q = query(collection(db, "comunidades"), where("slug", "==", id));
+    
     const unsub = onSnapshot(q, (snapshot) => {
       if (!snapshot.empty) {
         setComu({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() });
+      } else {
+        const docRef = doc(db, "comunidades", id);
+        onSnapshot(docRef, (d) => {
+          if (d.exists()) setComu({ id: d.id, ...d.data() });
+        });
       }
       setCarregando(false)
     });
     return () => unsub();
   }, [id]);
 
-  // 2. BUSCAR POSTS
+  // 2. BUSCAR POSTS (Sempre usando o ID real do documento)
   useEffect(() => {
     if (!comu?.id) return;
-    const q = query(collection(db, "posts_comunidades"), where("comunidadeId", "==", comu.id), orderBy("data", "desc"))
+    const q = query(
+      collection(db, "posts_comunidades"),
+      where("comunidadeId", "==", comu.id),
+      orderBy("data", "desc")
+    )
     const unsub = onSnapshot(q, (snap) => {
       setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     });
@@ -54,6 +64,7 @@ function PaginaComunidade({ usuario }) {
       comunidadeId: comu.id,
       autorUid: usuario.uid,
       autorNome: usuario.displayName || "Membro",
+      // --- CORREÇÃO IMPORTANTE 1: Garante que a foto do usuário seja salva no post ---
       autorFoto: usuario.photoURL || "", 
       texto: novoPost,
       data: serverTimestamp()
@@ -65,12 +76,14 @@ function PaginaComunidade({ usuario }) {
   if (!comu) return <div style={msgAviso}>Comunidade não encontrada.</div>
 
   const eDono = comu.criadoPor === usuario?.uid
-  const avatarPadrao = 'https://www.w3schools.com/howto/img_avatar.png';
+
+  // Definimos a foto padrão uma vez para usar em todos os lugares
+  const avatarFallback = 'https://www.w3schools.com/howto/img_avatar.png';
 
   return (
     <div style={containerPrincipal}>
       
-      {/* BANNER HERO */}
+      {/* BANNER 1200x400 (Responsivo) */}
       <div style={bannerHero(comu.capaUrl || comu.corCapa || '#002776', isMobile)}>
         <div style={iconeBanner(isMobile)}>
            {comu.emoji || '👥'}
@@ -79,18 +92,17 @@ function PaginaComunidade({ usuario }) {
 
       <div style={layoutGrid(isMobile)}>
         
-        {/* SIDEBAR ESQUERDA */}
+        {/* Sidebar Esquerda (Escondida no mobile) */}
         {!isMobile && (
           <SidebarEsquerda>
             <div style={cardStyle}>
-              <h2 style={tituloComu}>{comu.nome}</h2>
+              {/* CORREÇÃO DE CONTRASTE: Título em cinza escuro para legibilidade */}
+              <h2 style={{ margin: '0 0 10px 0', color: '#1a1a1a', textAlign: 'center' }}>{comu.nome}</h2>
               <div style={{ textAlign: 'center' }}><span style={badgeStyle}>{comu.categoria}</span></div>
               <p style={descricaoTexto}>{comu.descricao || "Bem-vindos!"}</p>
-              
-              {/* BOTÃO GERENCIAR AMARELO (FOCO EM LEGIBILIDADE) */}
               {eDono && (
-                <button onClick={() => navigate(`/comunidades/${id}/gerenciar`)} style={btnGerenciarAmarelo}>
-                  ⚙️ Gerenciar Comunidade
+                <button onClick={() => navigate(`/comunidades/${id}/gerenciar`)} style={btnGerenciar}>
+                  ⚙️ Gerenciar
                 </button>
               )}
             </div>
@@ -101,12 +113,12 @@ function PaginaComunidade({ usuario }) {
         <main style={{ flex: isMobile ? '1 1 100%' : '1', minWidth: '0' }}>
           <div style={cardStyle}>
             <div style={{ display: 'flex', gap: '10px' }}>
-              {/* FOTO DO USUÁRIO NO CAMPO DE POST */}
+              {/* --- CORREÇÃO IMPORTANTE 2: Usa a foto do usuário logado no campo de postagem --- */}
               <img 
-                src={usuario?.photoURL || avatarPadrao} 
+                src={usuario?.photoURL || avatarFallback} 
                 style={avatarStyle} 
-                alt="Sua Foto" 
-                onError={(e) => { e.target.src = avatarPadrao }}
+                alt="Sua foto" 
+                onError={(e) => { e.target.src = avatarFallback }} // Fallback se o link do Google falhar
               />
               <textarea 
                 placeholder={`O que há de novo na ${comu.nome}?`}
@@ -120,39 +132,38 @@ function PaginaComunidade({ usuario }) {
             </div>
           </div>
 
-          {/* LISTA DE POSTS */}
           {posts.map(p => (
             <div key={p.id} style={{ ...cardStyle, marginTop: '15px' }}>
               <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
                 <img 
-                  src={p.autorFoto || avatarPadrao} 
+                  src={p.autorFoto || avatarFallback} 
                   style={avatarStyle} 
                   alt="" 
-                  onError={(e) => { e.target.src = avatarPadrao }}
+                  onError={(e) => { e.target.src = avatarFallback }} 
                 />
                 <div>
                   <strong style={{ display: 'block', color: '#333' }}>{p.autorNome}</strong>
                   <small style={{ color: '#999' }}>{p.data?.toDate()?.toLocaleString()}</small>
                 </div>
               </div>
-              <p style={{ marginTop: '15px', color: '#444', lineHeight: '1.5' }}>{p.texto}</p>
+              <p style={{ marginTop: '15px', whiteSpace: 'pre-wrap', color: '#444', lineHeight: '1.5' }}>{p.texto}</p>
             </div>
           ))}
         </main>
 
-        {/* SIDEBAR DIREITA (MEMBROS) */}
+        {/* Sidebar Direita (Membros) */}
         {!isMobile && (
           <SidebarDireita>
             <div style={cardStyle}>
               <h4 style={{ marginBottom: '15px', color: '#333' }}>Membros ({comu.membrosCount || 1})</h4>
               <div style={gridMembros}>
-                 {/* SUA BOLINHA COMO MEMBRO ATIVO */}
-                 <div style={rostinhoMembro}>
+                 {/* --- CORREÇÃO IMPORTANTE 3: Usa a sua foto na lista de membros --- */}
+                 <div style={rostinhoPlaceholder}>
                     <img 
-                      src={usuario?.photoURL || avatarPadrao} 
+                      src={usuario?.photoURL || avatarFallback} 
                       style={imgFull} 
                       alt="Eu" 
-                      onError={(e) => { e.target.src = avatarPadrao }}
+                      onError={(e) => { e.target.src = avatarFallback }}
                     />
                  </div>
               </div>
@@ -164,7 +175,7 @@ function PaginaComunidade({ usuario }) {
   )
 }
 
-// --- ESTILOS COM CORREÇÕES ESPECÍFICAS ---
+// --- ESTILOS CONSOLIDADOS ---
 const containerPrincipal = { maxWidth: '1200px', margin: '0 auto', padding: '0 15px' };
 
 const bannerHero = (capa, isMobile) => ({
@@ -172,7 +183,8 @@ const bannerHero = (capa, isMobile) => ({
   height: isMobile ? '140px' : '280px',
   background: capa?.startsWith('http') ? `url(${capa}) center/cover no-repeat` : capa,
   borderRadius: isMobile ? '0' : '0 0 20px 20px',
-  position: 'relative'
+  position: 'relative',
+  transition: 'height 0.3s ease'
 });
 
 const iconeBanner = (isMobile) => ({
@@ -193,40 +205,14 @@ const iconeBanner = (isMobile) => ({
 
 const layoutGrid = (isMobile) => ({ display: 'flex', gap: '20px', marginTop: isMobile ? '45px' : '25px', paddingBottom: '60px' });
 const cardStyle = { background: 'white', padding: '20px', borderRadius: '15px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' };
-const tituloComu = { margin: '0 0 10px 0', color: '#1a1a1a', textAlign: 'center', fontSize: '1.4rem' };
 const badgeStyle = { background: '#f0f4ff', padding: '5px 12px', borderRadius: '15px', fontSize: '12px', fontWeight: 'bold', color: '#002776', display: 'inline-block' };
-const descricaoTexto = { fontSize: '14px', color: '#555', marginTop: '12px', textAlign: 'center', lineHeight: '1.4' };
-
-const btnGerenciarAmarelo = { 
-  width: '100%', 
-  marginTop: '15px', 
-  padding: '12px', 
-  borderRadius: '10px', 
-  border: 'none', 
-  background: '#FFD700', // AMARELO PARA CONTRASTE
-  color: '#000', 
-  fontWeight: 'bold', 
-  cursor: 'pointer',
-  boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
-};
-
-const textareaStyle = { 
-  flex: 1, 
-  minHeight: '90px', 
-  border: '1px solid #e0e0e0', 
-  borderRadius: '12px', 
-  padding: '12px', 
-  outline: 'none', 
-  resize: 'none', 
-  boxSizing: 'border-box', 
-  backgroundColor: '#f9f9f9',
-  fontSize: '15px'
-};
-
+const descricaoTexto = { fontSize: '14px', color: '#666', marginTop: '12px', textAlign: 'center', lineHeight: '1.4' };
+const btnGerenciar = { width: '100%', marginTop: '15px', padding: '10px', borderRadius: '8px', border: '1px solid #ddd', background: '#fcfcfc', fontWeight: 'bold', cursor: 'pointer' };
+const textareaStyle = { flex: 1, border: '1px solid #e0e0e0', borderRadius: '12px', padding: '12px', outline: 'none', resize: 'none', boxSizing: 'border-box', backgroundColor: '#f9f9f9', color: '#333' };
 const btnPostar = { background: '#009c3b', color: 'white', border: 'none', padding: '10px 28px', borderRadius: '25px', fontWeight: 'bold', cursor: 'pointer' };
 const avatarStyle = { width: '45px', height: '45px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #eee' };
 const gridMembros = { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', marginTop: '10px' };
-const rostinhoMembro = { width: '42px', height: '42px', borderRadius: '50%', background: '#eee', overflow: 'hidden', border: '2px solid #002776' };
+const rostinhoPlaceholder = { width: '42px', height: '42px', borderRadius: '50%', background: '#eee', overflow: 'hidden' };
 const imgFull = { width: '100%', height: '100%', objectFit: 'cover' };
 const msgAviso = { padding: '100px', textAlign: 'center', color: '#999' };
 
