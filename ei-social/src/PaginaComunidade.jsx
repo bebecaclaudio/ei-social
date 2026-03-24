@@ -5,7 +5,7 @@ import {
   collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc 
 } from 'firebase/firestore';
 
-// IMPORTANTE: Use o componente AvatarAutor que já corrigimos antes
+// Componente de Avatar que você validou
 function AvatarAutor({ uid, fallbackEmoji, tamanho = '45px' }) {
   const [fotoUrl, setFotoUrl] = useState(null);
   useEffect(() => {
@@ -23,7 +23,7 @@ function AvatarAutor({ uid, fallbackEmoji, tamanho = '45px' }) {
     <div style={{ 
       width: tamanho, height: tamanho, borderRadius: '50%', 
       overflow: 'hidden', background: '#eee', display: 'flex', 
-      alignItems: 'center', justifyContent: 'center', border: '1px solid #ddd'
+      alignItems: 'center', justifyContent: 'center', border: '1px solid #ddd', flexShrink: 0
     }}>
       {imagemParaExibir ? (
         <img src={imagemParaExibir} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -81,60 +81,62 @@ function PaginaComunidade({ usuario }) {
 
   return (
     <div style={{ background: '#f0f2f5', minHeight: '100vh' }}>
-      {/* BANNER COM AVATAR FLUTUANTE CORRIGIDO */}
-      <div style={{ height: '260px', background: comu.capaUrl || '#002776', position: 'relative' }}>
-        <div style={avatarFlutuante}>{comu.emoji || '👑'}</div>
+      
+      {/* BANNER RESPONSIVO COM MARGENS ✅ */}
+      <div style={containerGeral}>
+        <div style={bannerEstilo(comu.capaUrl || '#002776')}>
+          <div style={avatarFlutuante}>
+            {comu.emoji || '✨'}
+          </div>
+        </div>
       </div>
 
       <div style={isMobile ? layoutMobile : layoutDesktop}>
         
-        {/* COLUNA ESQUERDA - INFO */}
+        {/* COLUNA ESQUERDA */}
         {!isMobile && (
           <aside style={{ flex: '0 0 300px' }}>
-            <div style={cardLateral}>
-              <h2 style={{fontWeight:'900', fontSize:'22px'}}>{comu.nome}</h2>
+            <div style={cardBranco}>
+              <h2 style={titulo}>{comu.nome}</h2>
               <span style={badge}>{comu.categoria}</span>
-              <p style={{color:'#666', margin:'15px 0'}}>Bem-vindos à {comu.nome}!</p>
               <button onClick={() => navigate(`/comunidades/${id}/gerenciar`)} style={btnAmarelo}>
-                ⚙️ Gerenciar Comunidade
+                ⚙️ Gerenciar
               </button>
             </div>
           </aside>
         )}
 
-        {/* COLUNA CENTRAL - FEED */}
+        {/* COLUNA CENTRAL (FEED) */}
         <main style={{ flex: 1, maxWidth: isMobile ? '100%' : '600px' }}>
-          <div style={cardInput}>
+          <div style={cardBranco}>
             <div style={{ display: 'flex', gap: '12px' }}>
-              {/* USANDO O AVATARAUTOR PARA MINHA FOTO NO INPUT */}
               <AvatarAutor uid={usuario?.uid} tamanho="45px" />
               <textarea 
-                placeholder={`No que você está pensando, ${usuario?.displayName?.split(' ')[0]}?`}
+                placeholder="No que você está pensando?"
                 value={novoPost}
                 onChange={(e) => setNovoPost(e.target.value)}
-                style={textareaEstilo}
+                style={inputTextArea}
               />
             </div>
             <div style={{ textAlign: 'right', marginTop: '10px' }}>
-              <button onClick={enviarPost} style={btnPublicar}>Postar</button>
+              <button onClick={enviarPost} style={btnVerde}>Postar</button>
             </div>
           </div>
 
           {posts.map(p => (
-            <CardPostComunidade key={p.id} p={p} usuario={usuario} nomeComu={comu.nome} slugComu={comu.slug} />
+            <CardPostComunidade key={p.id} p={p} usuario={usuario} />
           ))}
         </main>
 
-        {/* COLUNA DIREITA - MEMBROS (PREPARADA PARA O BOTÃO) */}
+        {/* COLUNA DIREITA */}
         {!isMobile && (
           <aside style={{ flex: '0 0 280px' }}>
-            <div style={cardLateral}>
-              <h4 style={{color:'#888', marginBottom:'15px'}}>Membros</h4>
+            <div style={cardBranco}>
+              <h4 style={subtitulo}>Membros</h4>
               <div style={gridMembros}>
-                {/* Aqui entrará o seu map de 6 ou 9 bolinhas */}
                 <AvatarAutor uid={usuario?.uid} tamanho="40px" />
               </div>
-              <button style={btnVerMaisMembros}>Ver todos os membros</button>
+              <button style={btnTexto}>Ver todos</button>
             </div>
           </aside>
         )}
@@ -143,27 +145,37 @@ function PaginaComunidade({ usuario }) {
   );
 }
 
-// --- ESTILOS RESGATADOS E PROPORCIONAIS ---
+// --- ESTILOS NEUTROS E RESPONSIVOS ---
+const containerGeral = { maxWidth: '1280px', margin: '0 auto', padding: '0 15px' };
+
+const bannerEstilo = (bg) => ({
+  height: '250px',
+  background: bg.startsWith('http') ? `url(${bg}) center/cover` : bg,
+  position: 'relative',
+  borderRadius: '0 0 20px 20px',
+  marginTop: '10px'
+});
+
 const avatarFlutuante = {
-  width: '110px', height: '110px', background: 'white', borderRadius: '28px',
-  position: 'absolute', bottom: '-55px', left: '10%',
+  width: '100px', height: '100px', background: 'white', borderRadius: '25px',
+  position: 'absolute', bottom: '-50px', left: '50px',
   display: 'flex', alignItems: 'center', justifyContent: 'center',
-  fontSize: '55px', boxShadow: '0 8px 20px rgba(0,0,0,0.15)', zIndex: 10
+  fontSize: '50px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
 };
 
-const layoutDesktop = { display: 'flex', justifyContent: 'center', margin: '80px auto 0', gap: '25px', padding: '0 20px', maxWidth: '1280px' };
-const layoutMobile = { display: 'flex', flexDirection: 'column', padding: '75px 15px', gap: '20px' };
+const layoutDesktop = { display: 'flex', justifyContent: 'center', margin: '70px auto 0', gap: '20px', maxWidth: '1280px', padding: '0 15px' };
+const layoutMobile = { display: 'flex', flexDirection: 'column', padding: '70px 15px 20px', gap: '15px' };
 
-const cardLateral = { background: 'white', padding: '25px', borderRadius: '25px', textAlign: 'center', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' };
-const badge = { background: '#eef2ff', color: '#5865f2', padding: '5px 15px', borderRadius: '20px', fontWeight: 'bold', fontSize: '12px' };
+const cardBranco = { background: 'white', padding: '20px', borderRadius: '20px', marginBottom: '15px', border: '1px solid #ddd' };
+const titulo = { fontSize: '20px', fontWeight: 'bold', margin: '10px 0' };
+const badge = { background: '#eee', padding: '4px 10px', borderRadius: '10px', fontSize: '12px' };
+const subtitulo = { color: '#888', fontSize: '14px', marginBottom: '10px' };
 
-const cardInput = { background: 'white', padding: '20px', borderRadius: '20px', marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' };
-const textareaEstilo = { width: '100%', border: 'none', outline: 'none', fontSize: '16px', resize: 'none', minHeight: '60px', color: '#1a1a1a' };
+const inputTextArea = { width: '100%', border: '1px solid #eee', borderRadius: '10px', padding: '10px', outline: 'none', resize: 'none', minHeight: '60px', background: '#fff' };
+const btnVerde = { background: '#00a859', color: 'white', border: 'none', padding: '8px 20px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' };
+const btnAmarelo = { width: '100%', padding: '10px', background: '#FFD700', border: 'none', borderRadius: '10px', fontWeight: 'bold', marginTop: '15px', cursor: 'pointer' };
 
-const btnPublicar = { background: '#00a859', color: 'white', border: 'none', padding: '10px 30px', borderRadius: '15px', fontWeight: 'bold', cursor: 'pointer' };
-const btnAmarelo = { width: '100%', padding: '12px', background: '#FFD700', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' };
-
-const gridMembros = { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '15px' };
-const btnVerMaisMembros = { background: 'none', border: 'none', color: '#002776', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px' };
+const gridMembros = { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' };
+const btnTexto = { background: 'none', border: 'none', color: '#002776', fontWeight: 'bold', marginTop: '10px', cursor: 'pointer' };
 
 export default PaginaComunidade;
