@@ -1,305 +1,166 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { db } from './firebase-config';
-import { doc, getDoc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import Cropper from 'react-easy-crop';
+import { collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
+import CardPostComunidade from './CardPostComunidade';
 
-/** * MOTOR DE PROCESSAMENTO DE IMAGEM (Indispensável)
- * Converte as coordenadas do recorte (pixels) em uma imagem real para o banco.
- */
-const getCroppedImg = async (imageSrc, crop) => {
-  const image = await new Promise((resolve, reject) => {
-    const img = new Image();
-    img.setAttribute('crossOrigin', 'anonymous'); 
-    img.src = imageSrc;
-    img.onload = () => resolve(img);
-    img.onerror = (error) => reject(error);
-  });
+function PaginaComunidade({ usuario }) {
+  const { id } = useParams();
+  const navigate = useNavigate();
+  const [comu, setComu] = useState(null);
+  const [posts, setPosts] = useState([]);
+  const [novoPost, setNovoPost] = useState('');
+  const [largura, setLargura] = useState(window.innerWidth);
 
-  const canvas = document.createElement('canvas');
-  canvas.width = crop.width;
-  canvas.height = crop.height;
-  const ctx = canvas.getContext('2d');
-
-  ctx.drawImage(
-    image,
-    crop.x,
-    crop.y,
-    crop.width,
-    crop.height,
-    0,
-    0,
-    crop.width,
-    crop.height
-  );
-
-  return new Promise((resolve) => {
-    canvas.toBlob((blob) => {
-      resolve(blob);
-    }, 'image/jpeg');
-  });
-};
-
-function Perfil({ usuario }) {
-  // --- ESTADOS DE CONTROLE DE INTERFACE ---
-  const [carregando, setCarregando] = useState(true);
-  const [editando, setEditando] = useState(false);
-  const [menuFoto, setMenuFoto] = useState(false);
-  const [toast, setToast] = useState({ visivel: false, mensagem: '' });
-  
-  // --- ESTADOS DO RECORTE (CROP) ---
-  const [imagemParaCortar, setImagemParaCortar] = useState(null);
-  const [crop, setCrop] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
-  const [croppedAreaPixels, setCroppedAreaPixels] = useState(null);
-
-  // --- ESTADOS DE DADOS (Iniciam vazios conforme solicitado) ---
-  const [dadosPerfil, setDadosPerfil] = useState({ 
-    nome: '', 
-    bio: '', 
-    local: '', 
-    username: '' 
-  });
-  const [foto, setFoto] = useState('');
-  const LIMITE_BIO = 160;
-
-  // --- CICLO DE VIDA: CARREGAMENTO ---
   useEffect(() => {
-    async function carregarDados() {
-      if (!usuario?.uid) return;
-      try {
-        const docRef = doc(db, 'usuarios', usuario.uid);
-        const docSnap = await getDoc(docRef);
-        
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setDadosPerfil({
-            nome: data.nome || usuario.displayName || 'Usuário',
-            bio: data.bio || '', // Mantém vazio se não houver
-            local: data.local || '', // Dinâmico
-            username: data.username || ''
-          });
-          setFoto(data.foto || '');
-        }
-      } catch (error) {
-        console.error("Erro ao carregar dados do Firebase:", error);
-      } finally {
-        setCarregando(false);
-      }
-    }
-    carregarDados();
-  }, [usuario]);
+    const handleResize = () => setLargura(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
-  // --- FUNÇÕES DE INTERAÇÃO ---
-  const exibirToast = (msg) => {
-    setToast({ visivel: true, mensagem: msg });
-    setTimeout(() => setToast({ visivel: false, mensagem: '' }), 3500);
-  };
+  const isMobile = largura <= 992;
 
-  const handleUsernameChange = (val) => {
-    // Sanitização do @username em tempo real
-    const formatado = val.toLowerCase().replace(/\s/g, '').replace(/[^a-z0-9_.]/g, '');
-    setDadosPerfil({ ...dadosPerfil, username: formatado });
-  };
+  useEffect(() => {
+    const q = query(collection(db, "comunidades"), where("slug", "==", id));
+    return onSnapshot(q, (snap) => {
+      if (!snap.empty) setComu({ id: snap.docs[0].id, ...snap.docs[0].data() });
+    });
+  }, [id]);
 
-  // --- LÓGICA DE PERSISTÊNCIA (FIREBASE) ---
-  async function finalizarCorte() {
-    try {
-      const blob = await getCroppedImg(imagemParaCortar, croppedAreaPixels);
-      const reader = new FileReader();
-      reader.readAsDataURL(blob);
-      reader.onloadend = async () => {
-        const base64 = reader.result;
-        await setDoc(doc(db, 'usuarios', usuario.uid), { foto: base64 }, { merge: true });
-        setFoto(base64);
-        setImagemParaCortar(null);
-        exibirToast("Sua foto foi atualizada! ✨");
-      };
-    } catch (e) {
-      exibirToast("Erro ao processar a imagem.");
-    }
+  useEffect(() => {
+    if (!comu?.id) return;
+    const q = query(collection(db, "posts_comunidades"), where("comunidadeId", "==", comu.id), orderBy("data", "desc"));
+    return onSnapshot(q, (snap) => {
+      setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+  }, [comu?.id]);
+
+  async function enviarPost() {
+    if (!novoPost.trim() || !usuario) return;
+    await addDoc(collection(db, "posts_comunidades"), {
+      comunidadeId: comu.id,
+      comunidadeSlug: comu.slug,
+      comunidadeNome: comu.nome,
+      autorUid: usuario.uid,
+      autorNome: usuario.displayName,
+      autorFoto: usuario.photoURL,
+      texto: novoPost,
+      data: serverTimestamp(),
+      curtidas: [],
+      visualizacoes: 0,
+      comentariosCount: 0
+    });
+    setNovoPost('');
   }
 
-  async function salvarTudo() {
-    if (dadosPerfil.bio.length > LIMITE_BIO) return;
-    try {
-      // Validação de Username Único (Opcional, mas profissional)
-      if (dadosPerfil.username) {
-        const q = query(collection(db, "usuarios"), where("username", "==", dadosPerfil.username));
-        const snap = await getDocs(q);
-        if (snap.docs.some(d => d.id !== usuario.uid)) {
-          exibirToast("Este @username já está em uso.");
-          return;
-        }
-      }
-      await setDoc(doc(db, 'usuarios', usuario.uid), { ...dadosPerfil }, { merge: true });
-      setEditando(false);
-      exibirToast("Perfil salvo com sucesso!");
-    } catch (e) {
-      exibirToast("Erro ao salvar alterações.");
-    }
-  }
-
-  if (carregando) return <div style={sLoading}>Sincronizando dados...</div>;
+  if (!comu) return <div style={loading}>Carregando...</div>;
 
   return (
-    <div style={sPagina}>
-      
-      {/* SISTEMA DE FEEDBACK (Toast) */}
-      <div style={sToast(toast.visivel)}>{toast.mensagem}</div>
-
-      {/* MODAL DE RECORTE (CROPPER) */}
-      {imagemParaCortar && (
-        <div style={sModal}>
-          <div style={sCropBox}>
-            <Cropper 
-              image={imagemParaCortar} 
-              crop={crop} 
-              zoom={zoom} 
-              aspect={1} 
-              onCropChange={setCrop} 
-              onZoomChange={setZoom} 
-              onCropComplete={useCallback((_, p) => setCroppedAreaPixels(p), [])} 
-            />
-          </div>
-          <div style={{ marginTop: '20px', width: '320px' }}>
-            <input type="range" value={zoom} min={1} max={3} step={0.1} onChange={(e) => setZoom(e.target.value)} style={{ width: '100%' }} />
-            <div style={{ display: 'flex', gap: '10px', marginTop: '15px' }}>
-              <button onClick={() => setImagemParaCortar(null)} style={sBtnCancel}>Cancelar</button>
-              <button onClick={finalizarCorte} style={sBtnConfirm}>Confirmar</button>
-            </div>
-          </div>
+    <div style={bgPagina}>
+      {/* BANNER COM ALTURA CORRETA */}
+      <div style={bannerStyle(comu.capaUrl || '#002776')}>
+        {/* AVATAR FLUTUANTE - POSIÇÃO RESGATADA ✅ */}
+        <div style={avatarCapaWrapper}>
+          {comu.emoji || '👑'}
         </div>
-      )}
-
-      {/* BANNER E AVATAR */}
-      <div style={sBanner}>
-        <div style={sAvatarWrapper}>
-          <div style={sAvatarCircle}>
-            {foto ? <img src={foto} alt="" style={sImg} /> : <span style={{ fontSize: '50px' }}>👤</span>}
-            <div onClick={() => setMenuFoto(!menuFoto)} style={sCameraOverlay}>
-              <span>📷</span>
-            </div>
-          </div>
-          {menuFoto && (
-            <div style={sDropdown}>
-              <label style={sMenuItem}>
-                Nova Foto
-                <input type="file" accept="image/*" onChange={(e) => {
-                  const reader = new FileReader();
-                  reader.onload = () => { setImagemParaCortar(reader.result); setMenuFoto(false); };
-                  reader.readAsDataURL(e.target.files[0]);
-                }} style={{ display: 'none' }} />
-              </label>
-              <button onClick={() => setMenuFoto(false)} style={sMenuItem}>Fechar</button>
-            </div>
-          )}
-        </div>
-        <button onClick={() => setEditando(!editando)} style={sBtnEdit}>
-          {editando ? 'Cancelar' : 'Editar Perfil'}
-        </button>
       </div>
 
-      {/* ÁREA DE CONTEÚDO */}
-      <div style={sContent}>
-        {editando ? (
-          <div style={sForm}>
-            {/* USERNAME COM @ EM CINZA CLARO (#aaa) NO FUNDO ESCURO (#333) */}
-            <div style={{ position: 'relative', width: '100%' }}>
-              <span style={sAtSymbol}>@</span>
-              <input 
-                value={dadosPerfil.username} 
-                onChange={e => handleUsernameChange(e.target.value)} 
-                style={{ ...sInputDark, paddingLeft: '40px' }} 
-                placeholder="username" 
-              />
+      <div style={isMobile ? layoutMobile : layoutDesktop}>
+        
+        {/* COLUNA ESQUERDA (INFO) */}
+        {!isMobile && (
+          <aside style={{ flex: '0 0 280px' }}>
+            <div style={cardLateral}>
+              <h2 style={tituloComu}>{comu.nome}</h2>
+              <div style={badgeCat}>{comu.categoria}</div>
+              <p style={descrito}>Bem-vindos!</p>
+              <button onClick={() => navigate(`/comunidades/${id}/gerenciar`)} style={btnAmarelo}>
+                ⚙️ Gerenciar Comunidade
+              </button>
             </div>
+          </aside>
+        )}
 
-            <input 
-              value={dadosPerfil.nome} 
-              onChange={e => setDadosPerfil({...dadosPerfil, nome: e.target.value})} 
-              style={sInputDark} 
-              placeholder="Seu Nome" 
-            />
-
-            <input 
-              value={dadosPerfil.local} 
-              onChange={e => setDadosPerfil({...dadosPerfil, local: e.target.value})} 
-              style={sInputDark} 
-              placeholder="Localização (ex: Botucatu, SP)" 
-            />
-            
-            <div style={{ position: 'relative', width: '100%' }}>
+        {/* COLUNA CENTRAL (FEED) */}
+        <main style={{ flex: 1, maxWidth: isMobile ? '100%' : '650px' }}>
+          {isMobile && <h2 style={tituloMobile}>{comu.nome}</h2>}
+          
+          <div style={cardInput}>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <img src={usuario?.photoURL} style={avatarPerfil} alt="" />
               <textarea 
-                value={dadosPerfil.bio} 
-                onChange={e => setDadosPerfil({...dadosPerfil, bio: e.target.value})} 
-                style={{ ...sTextareaDark, borderColor: dadosPerfil.bio.length > LIMITE_BIO ? '#ff4444' : '#555' }} 
-                placeholder="Escreva algo sobre você..." 
+                placeholder={`O que há de novo na ${comu.nome}?`}
+                value={novoPost}
+                onChange={(e) => setNovoPost(e.target.value)}
+                style={inputArea}
               />
-              <span style={sCounter(dadosPerfil.bio.length > LIMITE_BIO)}>
-                {dadosPerfil.bio.length}/{LIMITE_BIO}
-              </span>
             </div>
+            <div style={{ textAlign: 'right', marginTop: '10px' }}>
+              <button onClick={enviarPost} style={btnVerde}>Postar</button>
+            </div>
+          </div>
 
-            <button 
-              onClick={salvarTudo} 
-              disabled={dadosPerfil.bio.length > LIMITE_BIO} 
-              style={{ ...sBtnSave, opacity: dadosPerfil.bio.length > LIMITE_BIO ? 0.5 : 1 }}
-            >
-              Salvar Perfil
-            </button>
-          </div>
-        ) : (
-          <div style={{ animation: 'fadeIn 0.5s ease' }}>
-            <h2 style={sDisplayNome}>{dadosPerfil.nome}</h2>
-            <p style={sDisplayUser}>@{dadosPerfil.username || 'usuario'}</p>
-            {dadosPerfil.local && <p style={sDisplayLocal}>📍 {dadosPerfil.local}</p>}
-            <p style={sDisplayBio}>{dadosPerfil.bio}</p>
-          </div>
+          {posts.map(p => (
+            <CardPostComunidade 
+              key={p.id} p={p} usuario={usuario} 
+              nomeComu={comu.nome} slugComu={comu.slug} 
+            />
+          ))}
+        </main>
+
+        {/* COLUNA DIREITA (MEMBROS) */}
+        {!isMobile && (
+          <aside style={{ flex: '0 0 250px' }}>
+            <div style={cardLateral}>
+              <h4 style={metaTitulo}>Membros</h4>
+              <div style={listaMembros}>
+                <img src={usuario?.photoURL} style={avatarMembro} alt="" />
+              </div>
+            </div>
+          </aside>
         )}
       </div>
     </div>
   );
 }
 
-// --- ESTILOS REFINADOS ---
-const sPagina = { minHeight: '100vh', background: '#f8f9fa', paddingBottom: '60px', fontFamily: 'sans-serif' };
-const sLoading = { textAlign: 'center', padding: '100px', fontWeight: 'bold', color: '#002776' };
+// --- ESTILOS COM PROPORÇÕES REAIS ---
+const bgPagina = { backgroundColor: '#f0f2f5', minHeight: '100vh', fontFamily: 'sans-serif' };
 
-const sToast = (v) => ({
-  position: 'fixed', bottom: '40px', left: '50%', transform: `translateX(-50%) translateY(${v ? '0' : '40px'})`,
-  background: '#002776', color: 'white', padding: '14px 30px', borderRadius: '50px', fontWeight: 'bold',
-  boxShadow: '0 8px 25px rgba(0,0,0,0.3)', zIndex: 10000, transition: '0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)', opacity: v ? 1 : 0
+const bannerStyle = (bg) => ({
+  height: '240px',
+  background: bg.startsWith('http') ? `url(${bg}) center/cover` : bg,
+  position: 'relative',
+  borderBottom: '1px solid rgba(0,0,0,0.1)'
 });
 
-const sBanner = { height: '180px', background: 'linear-gradient(135deg, #002776, #009c3b, #ffdf00)', position: 'relative' };
-const sAvatarWrapper = { position: 'absolute', bottom: '-55px', left: '50%', transform: 'translateX(-50%)', zIndex: 10 };
-const sAvatarCircle = { width: '125px', height: '125px', borderRadius: '50%', background: 'white', border: '4px solid white', overflow: 'hidden', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' };
-const sImg = { width: '100%', height: '100%', objectFit: 'cover' };
-const sCameraOverlay = { position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', opacity: 0, transition: '0.3s' };
-// Para fazer o hover da câmera funcionar, você pode adicionar uma classe CSS ou manter o estado como fiz no JS anterior.
+const avatarCapaWrapper = {
+  width: '110px', height: '110px', background: 'white', borderRadius: '28px',
+  position: 'absolute', bottom: '-55px', left: '10%',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  fontSize: '55px', boxShadow: '0 8px 20px rgba(0,0,0,0.15)', zIndex: 10
+};
 
-const sDropdown = { position: 'absolute', top: '135px', left: '50%', transform: 'translateX(-50%)', background: 'white', padding: '10px', borderRadius: '15px', boxShadow: '0 8px 20px rgba(0,0,0,0.2)', minWidth: '150px' };
-const sMenuItem = { display: 'block', padding: '12px', textAlign: 'center', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', borderRadius: '10px', background: '#f8f9fa', border: 'none', marginBottom: '5px' };
+const layoutDesktop = { display: 'flex', justifyContent: 'center', margin: '80px auto 0', gap: '25px', padding: '0 20px', maxWidth: '1250px' };
+const layoutMobile = { display: 'flex', flexDirection: 'column', padding: '75px 15px 20px', gap: '20px' };
 
-const sBtnEdit = { position: 'absolute', right: '20px', bottom: '20px', padding: '10px 20px', borderRadius: '25px', border: 'none', background: 'white', color: '#002776', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 4px 10px rgba(0,0,0,0.1)' };
+const cardLateral = { background: 'white', padding: '22px', borderRadius: '22px', textAlign: 'center', border: '1px solid #e1e8ed' };
+const tituloComu = { fontSize: '22px', fontWeight: '800', margin: '10px 0', color: '#0f1419' };
+const tituloMobile = { fontSize: '22px', fontWeight: '800', marginBottom: '15px', color: '#0f1419' };
 
-const sContent = { textAlign: 'center', marginTop: '80px', padding: '0 20px' };
-const sDisplayNome = { fontSize: '34px', margin: '0', fontWeight: 'bold', color: '#1a1a1a' };
-const sDisplayUser = { color: '#002776', fontWeight: 'bold', fontSize: '19px', margin: '5px 0' };
-const sDisplayLocal = { color: '#666', fontSize: '15px', marginBottom: '15px' };
-const sDisplayBio = { maxWidth: '500px', margin: '0 auto', color: '#444', lineHeight: '1.6', whiteSpace: 'pre-wrap' };
+const badgeCat = { background: '#eef2ff', color: '#5865f2', padding: '5px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold', display: 'inline-block' };
+const descrito = { color: '#536471', fontSize: '14px', margin: '15px 0' };
 
-const sForm = { display: 'flex', flexDirection: 'column', gap: '15px', maxWidth: '340px', margin: '0 auto' };
-const sAtSymbol = { position: 'absolute', left: '15px', top: '50%', transform: 'translateY(-50%)', color: '#aaa', fontWeight: 'bold', fontSize: '16px' };
-const sInputDark = { width: '100%', padding: '14px', borderRadius: '12px', border: 'none', background: '#333', color: 'white', fontSize: '16px', boxSizing: 'border-box' };
-const sTextareaDark = { width: '100%', padding: '14px', height: '110px', borderRadius: '12px', border: '1px solid #555', background: '#333', color: 'white', fontSize: '16px', resize: 'none', boxSizing: 'border-box' };
-const sCounter = (e) => ({ position: 'absolute', bottom: '12px', right: '15px', fontSize: '11px', color: e ? '#ff4444' : '#888', fontWeight: 'bold' });
+const cardInput = { background: 'white', padding: '18px', borderRadius: '22px', marginBottom: '18px', border: '1px solid #e1e8ed' };
+const inputArea = { width: '100%', border: 'none', outline: 'none', fontSize: '17px', resize: 'none', minHeight: '60px' };
 
-const sBtnSave = { background: '#009c3b', color: 'white', padding: '15px', border: 'none', borderRadius: '35px', fontWeight: 'bold', cursor: 'pointer', fontSize: '16px' };
+const btnVerde = { background: '#00a859', color: 'white', border: 'none', padding: '10px 28px', borderRadius: '14px', fontWeight: 'bold', cursor: 'pointer' };
+const btnAmarelo = { width: '100%', padding: '12px', background: '#FFD700', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer', marginTop: '10px' };
 
-const sModal = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' };
-const sCropBox = { position: 'relative', width: '320px', height: '320px', borderRadius: '15px', overflow: 'hidden' };
-const sBtnConfirm = { background: '#009c3b', color: 'white', border: 'none', padding: '12px 25px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' };
-const sBtnCancel = { background: '#555', color: 'white', border: 'none', padding: '12px 25px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' };
+const avatarPerfil = { width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover' };
+const avatarMembro = { width: '38px', height: '38px', borderRadius: '50%', border: '2px solid #00a859' };
+const metaTitulo = { color: '#888', textTransform: 'uppercase', fontSize: '12px', letterSpacing: '1px', marginBottom: '15px' };
+const listaMembros = { display: 'flex', justifyContent: 'center', gap: '8px' };
+const loading = { textAlign: 'center', padding: '100px', fontSize: '20px', fontWeight: 'bold' };
 
-export default Perfil;
+export default PaginaComunidade;
