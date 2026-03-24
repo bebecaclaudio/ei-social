@@ -6,7 +6,7 @@ import {
   deleteDoc, getDoc 
 } from 'firebase/firestore'
 
-// --- COMPONENTE PARA BUSCAR FOTO ATUALIZADA DO AUTOR ---
+// --- COMPONENTE: BUSCA FOTO NO BANCO OU USA GOOGLE (SEM MOSTRAR TEXTO) ---
 function AvatarAutor({ uid, fallbackEmoji, tamanho = '40px' }) {
   const [fotoUrl, setFotoUrl] = useState(null)
 
@@ -21,16 +21,26 @@ function AvatarAutor({ uid, fallbackEmoji, tamanho = '40px' }) {
     carregarFoto()
   }, [uid])
 
+  // Checa se é um link (Google ou Base64) para não renderizar como texto
+  const ehLink = (str) => typeof str === 'string' && (str.startsWith('http') || str.startsWith('data:image'));
+  const imagemParaExibir = fotoUrl || (ehLink(fallbackEmoji) ? fallbackEmoji : null);
+
   return (
     <div style={{ 
       width: tamanho, height: tamanho, borderRadius: '50%', 
       overflow: 'hidden', background: '#eee', display: 'flex', 
-      alignItems: 'center', justifyContent: 'center' 
+      alignItems: 'center', justifyContent: 'center', border: '1px solid #ddd'
     }}>
-      {fotoUrl ? (
-        <img src={fotoUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      {imagemParaExibir ? (
+        <img 
+          src={imagemParaExibir} 
+          alt="" 
+          style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+        />
       ) : (
-        <span style={{ fontSize: parseInt(tamanho) * 0.6 + 'px' }}>{fallbackEmoji || '👤'}</span>
+        <span style={{ fontSize: parseInt(tamanho) * 0.6 + 'px' }}>
+          {fallbackEmoji && !ehLink(fallbackEmoji) ? fallbackEmoji : '👤'}
+        </span>
       )}
     </div>
   )
@@ -44,9 +54,9 @@ function Feed({ usuario }) {
   const [postParaExcluir, setPostParaExcluir] = useState(null)
   const [editandoId, setEditandoId] = useState(null)
   const [textoEditado, setTextoEditado] = useState('')
-  const [minhaFotoAtual, setMinhaFotoAtual] = useState('') // Para o campo de postar
+  const [minhaFotoAtual, setMinhaFotoAtual] = useState('')
 
-  // Carregar minha foto atual para a área de "No que você está pensando?"
+  // Monitora sua própria foto para a área de postagem
   useEffect(() => {
     if (!usuario?.uid) return
     const unsub = onSnapshot(doc(db, "usuarios", usuario.uid), (docSnap) => {
@@ -55,6 +65,7 @@ function Feed({ usuario }) {
     return () => unsub()
   }, [usuario])
 
+  // Carrega os posts
   useEffect(() => {
     const q = query(collection(db, "posts"), orderBy("data", "desc"))
     const unsub = onSnapshot(q, (snapshot) => {
@@ -63,26 +74,12 @@ function Feed({ usuario }) {
     return () => unsub()
   }, [])
 
-  function mandarEi(postId, nomeUsuario) {
-    if (eiEnviados.includes(postId)) return 
-    setEiEnviados([...eiEnviados, postId])
-    if (Notification.permission === "granted") {
-      new Notification("👋 Ei!", {
-        body: `Você mandou um "Ei!" para ${nomeUsuario}`,
-        icon: 'https://cdn-icons-png.flaticon.com/512/1611/1611733.png'
-      });
-    } else {
-      alert(`👋 Ei mandado para ${nomeUsuario}!`);
-    }
-  }
-
   async function publicar() {
     if (novoPost.trim() === '') return
     try {
       await addDoc(collection(db, "posts"), {
         autorUid: usuario?.uid,
         usuario: usuario?.displayName || 'Você',
-        // Salvamos o Base64 atual no post, mas o componente AvatarAutor garantirá a atualização futura
         avatar: minhaFotoAtual || usuario?.photoURL || '🧑',
         texto: novoPost,
         curtidas: 0,
@@ -121,6 +118,16 @@ function Feed({ usuario }) {
     } catch (e) { console.error(e) }
   }
 
+  function mandarEi(postId, nomeUsuario) {
+    if (eiEnviados.includes(postId)) return 
+    setEiEnviados([...eiEnviados, postId])
+    if (Notification.permission === "granted") {
+      new Notification("👋 Ei!", { body: `Você mandou um "Ei!" para ${nomeUsuario}` });
+    } else {
+      alert(`👋 Ei mandado para ${nomeUsuario}!`);
+    }
+  }
+
   return (
     <div style={{ minHeight: '100vh', background: '#f0f2f5', paddingBottom: '80px' }}>
       
@@ -128,8 +135,7 @@ function Feed({ usuario }) {
         <div style={overlayStyle}>
           <div style={modalStyle}>
             <h3 style={{ color: '#002776' }}>Excluir Postagem?</h3>
-            <p style={{ color: '#666', margin: '15px 0' }}>Essa ação não pode ser desfeita.</p>
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
+            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', marginTop: '20px' }}>
               <button onClick={() => setPostParaExcluir(null)} style={btnCancel}>Cancelar</button>
               <button onClick={confirmarExclusao} style={btnDeleteConfirm}>Excluir</button>
             </div>
@@ -139,13 +145,12 @@ function Feed({ usuario }) {
 
       <div style={{ maxWidth: '600px', margin: '0 auto', padding: '24px 16px' }}>
         
-        {/* ÁREA DE POSTAR (CORRIGIDA) */}
+        {/* ÁREA DE POSTAR */}
         <div style={cardEstilo}>
           <div style={{ display: 'flex', gap: '12px' }}>
-            {/* Foto do topo da área de postagem */}
-            <div style={{ width: '45px', height: '45px', borderRadius: '50%', overflow: 'hidden' }}>
-                {minhaFotoAtual ? (
-                    <img src={minhaFotoAtual} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+            <div style={{ width: '45px', height: '45px', borderRadius: '50%', overflow: 'hidden', background: '#eee' }}>
+                {(minhaFotoAtual || usuario?.photoURL) ? (
+                    <img src={minhaFotoAtual || usuario?.photoURL} style={{width: '100%', height: '100%', objectFit: 'cover'}} alt="" />
                 ) : <span style={{fontSize: '36px'}}>🧑</span>}
             </div>
             <textarea
@@ -154,7 +159,7 @@ function Feed({ usuario }) {
               onChange={(e) => setNovoPost(e.target.value)}
               onFocus={() => setFocado(true)}
               onBlur={() => setFocado(false)}
-              style={{...textareaEstilo, border: focado ? '2px solid #009c3b' : '1px solid #ddd', color: '#333'}}
+              style={{...textareaEstilo, border: focado ? '2px solid #009c3b' : '1px solid #ddd'}}
             />
           </div>
           <div style={{ display: 'flex', justifyContent: 'end', marginTop: '12px' }}>
@@ -174,28 +179,22 @@ function Feed({ usuario }) {
               
               {souEu && !isEditando && (
                 <div style={{ position: 'absolute', top: '20px', right: '20px', display: 'flex', gap: '12px' }}>
-                  <span title="Editar" onClick={() => { setEditandoId(post.id); setTextoEditado(post.texto); }} style={iconBtn}>✏️</span>
-                  <span title="Excluir" onClick={() => setPostParaExcluir(post.id)} style={iconBtn}>🗑️</span>
+                  <span onClick={() => { setEditandoId(post.id); setTextoEditado(post.texto); }} style={iconBtn}>✏️</span>
+                  <span onClick={() => setPostParaExcluir(post.id)} style={iconBtn}>🗑️</span>
                 </div>
               )}
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                {/* AVATAR DINÂMICO NO FEED */}
                 <AvatarAutor uid={post.autorUid} fallbackEmoji={post.avatar} />
-                
                 <div>
-                  <p style={{ fontWeight: 'bold', fontSize: '15px' }}>{post.usuario}</p>
-                  <p style={{ color: '#888', fontSize: '12px' }}>{post.data?.toDate ? post.data.toDate().toLocaleTimeString() : 'agora'}</p>
+                  <p style={{ fontWeight: 'bold', fontSize: '15px', margin: 0 }}>{post.usuario}</p>
+                  <p style={{ color: '#888', fontSize: '12px', margin: 0 }}>{post.data?.toDate ? post.data.toDate().toLocaleTimeString() : 'agora'}</p>
                 </div>
               </div>
 
               {isEditando ? (
                 <div>
-                  <textarea 
-                    value={textoEditado}
-                    onChange={(e) => setTextoEditado(e.target.value)}
-                    style={{...textareaEstilo, height: '80px', border: '2px solid #009c3b', color: '#333'}}
-                  />
+                  <textarea value={textoEditado} onChange={(e) => setTextoEditado(e.target.value)} style={textareaEstilo} />
                   <div style={{ display: 'flex', gap: '8px', marginTop: '8px', justifyContent: 'end' }}>
                     <button onClick={() => setEditandoId(null)} style={btnCancel}>Cancelar</button>
                     <button onClick={() => salvarEdicao(post.id)} style={btnSave}>Salvar</button>
@@ -206,32 +205,12 @@ function Feed({ usuario }) {
               )}
               
               <div style={barraAcoes}>
-                <button 
-                  onClick={() => curtir(post)} 
-                  style={{
-                    ...btnAcao,
-                    color: postCurtidoPorMim ? '#e00' : '#555',
-                    background: postCurtidoPorMim ? '#fff0f0' : 'none',
-                    borderRadius: '20px',
-                    padding: '6px 14px'
-                  }}
-                >
+                <button onClick={() => curtir(post)} style={{...btnAcao, color: postCurtidoPorMim ? '#e00' : '#555'}}>
                   {postCurtidoPorMim ? '❤️' : '🤍'} {post.curtidas || 0}
                 </button>
-
-                <button style={{...btnAcao, padding: '6px 14px'}}>💬 Comentar</button>
-
+                <button style={btnAcao}>💬 Comentar</button>
                 {!souEu && (
-                  <button 
-                    onClick={() => mandarEi(post.id, post.usuario)} 
-                    style={{
-                      ...btnAcao,
-                      background: eiJaEnviado ? '#fffbe6' : 'none',
-                      color: eiJaEnviado ? '#ffaa00' : '#555',
-                      borderRadius: '20px',
-                      padding: '6px 14px'
-                    }}
-                  >
+                  <button onClick={() => mandarEi(post.id, post.usuario)} style={{...btnAcao, color: eiJaEnviado ? '#ffaa00' : '#555'}}>
                     {eiJaEnviado ? '👋 Ei enviado!' : '👋 Ei!'}
                   </button>
                 )}
@@ -244,17 +223,17 @@ function Feed({ usuario }) {
   )
 }
 
-// Estilos mantidos (omitidos para brevidade, use os mesmos do seu código original)
+// --- ESTILOS ---
 const overlayStyle = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, backdropFilter: 'blur(4px)' };
 const modalStyle = { background: 'white', padding: '30px', borderRadius: '20px', textAlign: 'center', width: '90%', maxWidth: '320px' };
 const btnDeleteConfirm = { background: '#ff3b30', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' };
 const btnCancel = { background: '#eee', color: '#555', border: 'none', padding: '10px 20px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' };
 const btnSave = { background: '#009c3b', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' };
 const cardEstilo = { background: 'white', borderRadius: '16px', padding: '20px', marginBottom: '16px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' };
-const textareaEstilo = { flex: 1, padding: '12px', borderRadius: '12px', fontSize: '15px', outline: 'none', background: 'white', resize: 'none', width: '100%', boxSizing: 'border-box' };
+const textareaEstilo = { flex: 1, padding: '12px', borderRadius: '12px', fontSize: '15px', outline: 'none', background: 'white', resize: 'none', width: '100%', boxSizing: 'border-box', minHeight: '60px' };
 const btnPublicar = (vazio) => ({ padding: '8px 24px', borderRadius: '10px', border: 'none', color: 'white', fontWeight: 'bold', cursor: vazio ? 'not-allowed' : 'pointer', background: vazio ? '#ccc' : 'linear-gradient(90deg, #002776, #009c3b)' });
 const barraAcoes = { display: 'flex', gap: '12px', borderTop: '1px solid #eee', paddingTop: '12px', marginTop: '12px' };
-const btnAcao = { border: 'none', background: 'none', cursor: 'pointer', fontWeight: 'bold' };
+const btnAcao = { border: 'none', background: 'none', cursor: 'pointer', fontWeight: 'bold', padding: '6px 12px' };
 const iconBtn = { cursor: 'pointer', opacity: 0.5, fontSize: '16px' };
 
 export default Feed;
