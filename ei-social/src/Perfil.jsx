@@ -1,14 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
-import { db, storage } from './firebase-config'
+import { db } from './firebase-config'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import Cropper from 'react-easy-crop'
 
-// Função auxiliar para processar o recorte da imagem
+// Função para processar o recorte e devolver a imagem
 const getCroppedImg = async (imageSrc, crop) => {
   const image = await new Promise((resolve, reject) => {
     const img = new Image();
-    // ESSA LINHA É O SEGREDO: Deve vir antes do .src para evitar o "Processando" infinito
     img.setAttribute('crossOrigin', 'anonymous'); 
     img.src = imageSrc;
     img.onload = () => resolve(img);
@@ -69,8 +67,7 @@ function Perfil({ usuario }) {
             bio: data.bio || '',
             local: data.local || ''
           })
-          // Agora focado apenas no campo 'foto' para manter o banco limpo
-          setFoto(data.foto || usuario.photoURL || '')
+          setFoto(data.foto || '')
         } else {
           setDadosPerfil({ nome: usuario.displayName || 'Usuário', bio: '', local: '' })
           setFoto(usuario.photoURL || '')
@@ -91,24 +88,33 @@ function Perfil({ usuario }) {
     reader.readAsDataURL(file)
   }
 
+  // ESTRATÉGIA BASE64: SALVA DIRETO NO BANCO DE DADOS
   async function confirmarCorte() {
     try {
       setSubindoFoto(true)
       const blob = await getCroppedImg(imagemParaCortar, croppedAreaPixels)
-      const storageRef = ref(storage, `usuarios/${usuario.uid}/perfil.jpg`)
-      await uploadBytes(storageRef, blob)
-      const url = await getDownloadURL(storageRef)
       
-      setFoto(url)
-      // Atualiza o Firestore garantindo que salve no campo 'foto' e não crie duplicatas
-      await setDoc(doc(db, 'usuarios', usuario.uid), { 
-        foto: url,
-        ultimaAtualizacao: new Date() 
-      }, { merge: true })
+      const reader = new FileReader()
+      reader.readAsDataURL(blob)
       
-      setImagemParaCortar(null)
-    } catch (e) { alert("Erro ao salvar imagem."); console.error(e); }
-    finally { setSubindoFoto(false) }
+      reader.onloadend = async () => {
+        const base64data = reader.result // Foto virou texto aqui
+
+        // Atualiza o Firestore (Campo 'foto' recebe o texto da imagem)
+        await setDoc(doc(db, 'usuarios', usuario.uid), { 
+          foto: base64data,
+          ultimaAtualizacao: new Date() 
+        }, { merge: true })
+        
+        setFoto(base64data)
+        setImagemParaCortar(null)
+      }
+    } catch (e) { 
+      alert("Erro ao processar imagem.")
+      console.error(e) 
+    } finally { 
+      setSubindoFoto(false) 
+    }
   }
 
   async function salvarTexto() {
@@ -136,7 +142,7 @@ function Perfil({ usuario }) {
             <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
               <button onClick={() => setImagemParaCortar(null)} style={btnCancel}>Cancelar</button>
               <button onClick={confirmarCorte} disabled={subindoFoto} style={btnConfirm}>
-                {subindoFoto ? 'Processando...' : 'Confirmar Foto'}
+                {subindoFoto ? 'Salvando...' : 'Confirmar Foto'}
               </button>
             </div>
           </div>
@@ -152,7 +158,7 @@ function Perfil({ usuario }) {
             onMouseLeave={() => setHoverFoto(false)}
           >
             {subindoFoto ? (
-               <span style={{ fontSize: '14px', color: '#666' }}>Lendo...</span>
+               <span style={{ fontSize: '14px', color: '#666' }}>Processando...</span>
             ) : foto ? (
               <img src={foto} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
@@ -208,7 +214,6 @@ function Perfil({ usuario }) {
           </div>
         ) : (
           <>
-            {/* NOME DO PERFIL EM PRETO (#000) E DESTAQUE */}
             <h2 style={{ fontSize: '32px', margin: '0 0 5px', color: '#000', fontWeight: 'bold' }}>{dadosPerfil.nome}</h2>
             <p style={{ color: '#666', fontSize: '14px', margin: '0 0 15px' }}>📍 {dadosPerfil.local || 'Explorando o mundo'}</p>
             <p style={{ maxWidth: '450px', margin: '0 auto', color: '#444', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
@@ -221,7 +226,7 @@ function Perfil({ usuario }) {
   )
 }
 
-// ESTILOS
+// ESTILOS (MANTIDOS)
 const modalOverlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' };
 const cropContainer = { position: 'relative', width: '320px', height: '320px', background: '#333', borderRadius: '12px', overflow: 'hidden' };
 const avatarWrapper = { position: 'absolute', bottom: '-50px', left: '50%', transform: 'translateX(-50%)', zIndex: 10 };
@@ -229,21 +234,7 @@ const avatarCircle = { width: '120px', height: '120px', borderRadius: '50%', bac
 const cameraOverlay = { position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: '0.3s' };
 const menuDropdown = { position: 'absolute', top: '130px', left: '50%', transform: 'translateX(-50%)', background: 'white', padding: '10px', borderRadius: '15px', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '160px' };
 const menuItem = { padding: '10px', textAlign: 'center', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', borderRadius: '8px', background: '#f8f9fa' };
-
-const btnEdit = { 
-  position: 'absolute', 
-  right: '20px', 
-  bottom: '20px', 
-  padding: '10px 20px', 
-  borderRadius: '25px', 
-  border: 'none', 
-  background: 'white', 
-  color: '#000', // Texto preto para contraste no fundo claro
-  fontWeight: 'bold', 
-  cursor: 'pointer', 
-  boxShadow: '0 2px 10px rgba(0,0,0,0.1)' 
-};
-
+const btnEdit = { position: 'absolute', right: '20px', bottom: '20px', padding: '10px 20px', borderRadius: '25px', border: 'none', background: 'white', color: '#000', fontWeight: 'bold', cursor: 'pointer', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' };
 const btnConfirm = { flex: 1, background: '#009c3b', color: 'white', border: 'none', padding: '12px', borderRadius: '10px', fontWeight: 'bold', cursor: 'pointer' };
 const btnCancel = { flex: 1, background: '#555', color: 'white', border: 'none', padding: '12px', borderRadius: '10px', cursor: 'pointer' };
 const formStyle = { display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' };
