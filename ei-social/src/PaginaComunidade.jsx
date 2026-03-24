@@ -3,55 +3,66 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { db } from './firebase-config'
 import { 
   doc, onSnapshot, collection, query, where, orderBy, 
-  addDoc, serverTimestamp, updateDoc, arrayUnion 
+  addDoc, serverTimestamp 
 } from 'firebase/firestore'
 import { SidebarEsquerda, SidebarDireita } from './Sidebars'
 
 function PaginaComunidade({ usuario }) {
-  const { id } = useParams() // Agora o 'id' que vem da URL é o slug (ex: monarquistas-brasileiros)
+  const { id } = useParams() // Este 'id' é o que vem da URL (ex: monarquistas-brasileiros)
   const navigate = useNavigate()
   const [comu, setComu] = useState(null)
   const [posts, setPosts] = useState([])
   const [novoPost, setNovoPost] = useState('')
+  const [carregando, setCarregando] = useState(true)
 
-  // 1. MODIFICADO: Monitorar dados da Comunidade usando o SLUG
+  // 1. BUSCAR COMUNIDADE PELO SLUG
   useEffect(() => {
-    // Criamos uma busca (query) onde o campo 'slug' seja igual ao 'id' da URL
+    setCarregando(true)
+    // Criamos a consulta procurando pelo campo 'slug'
     const q = query(collection(db, "comunidades"), where("slug", "==", id));
     
     const unsub = onSnapshot(q, (snapshot) => {
       if (!snapshot.empty) {
-        // Como o slug é único, pegamos o primeiro resultado [0]
         const docSnap = snapshot.docs[0];
         setComu({ id: docSnap.id, ...docSnap.data() });
+        setCarregando(false)
       } else {
-        // Se não achar nada, talvez seja um ID antigo (código aleatório)
-        // Opcional: tentar buscar por doc(db, "comunidades", id) aqui
+        // Se não encontrar pelo slug, tenta buscar pelo ID (para compatibilidade)
+        const docRef = doc(db, "comunidades", id);
+        onSnapshot(docRef, (d) => {
+          if (d.exists()) {
+            setComu({ id: d.id, ...d.data() });
+          } else {
+            console.error("Comunidade não encontrada!");
+            // Se quiser, pode descomentar a linha abaixo para voltar se não existir:
+            // navigate('/comunidades') 
+          }
+          setCarregando(false)
+        });
       }
     });
     return () => unsub();
   }, [id]);
 
-  // 2. MODIFICADO: Monitorar Posts usando o ID REAL (comu.id)
+  // 2. BUSCAR POSTS (Sempre usando o ID real do documento)
   useEffect(() => {
-    if (!comu?.id) return; // Só busca posts quando a comunidade for encontrada
+    if (!comu?.id) return;
 
     const q = query(
       collection(db, "posts_comunidades"),
-      where("comunidadeId", "==", comu.id), // Importante: usar comu.id e não o slug da URL
+      where("comunidadeId", "==", comu.id),
       orderBy("data", "desc")
     )
     const unsub = onSnapshot(q, (snap) => {
       setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-    })
+    });
     return () => unsub()
-  }, [comu?.id]); // Monitora a mudança do objeto comu
+  }, [comu?.id]);
 
-  // 3. Função para Postar
   async function enviarPost() {
     if (!novoPost.trim() || !comu?.id) return
     await addDoc(collection(db, "posts_comunidades"), {
-      comunidadeId: comu.id, // ID real do banco
+      comunidadeId: comu.id,
       autorUid: usuario.uid,
       autorNome: usuario.displayName || "Membro",
       autorFoto: usuario.photoURL || "",
@@ -61,14 +72,13 @@ function PaginaComunidade({ usuario }) {
     setNovoPost('')
   }
 
-  if (!comu) return <div style={{padding: '50px', textAlign: 'center'}}>Carregando...</div>
+  if (carregando) return <div style={{padding: '50px', textAlign: 'center'}}>Carregando comunidade...</div>
+  if (!comu) return <div style={{padding: '50px', textAlign: 'center'}}>Comunidade não encontrada.</div>
 
   const eDono = comu.criadoPor === usuario?.uid
 
   return (
     <div style={layoutGrid}>
-      
-      {/* COLUNA ESQUERDA: IDENTIDADE */}
       <SidebarEsquerda>
         <div style={cardStyle}>
           <div style={bannerEstilo(comu.corCapa || '#002776')}>
@@ -76,20 +86,16 @@ function PaginaComunidade({ usuario }) {
           </div>
           <h2 style={{ margin: '15px 0 5px 0' }}>{comu.nome}</h2>
           <p style={badge}>{comu.categoria}</p>
-          <p style={descricaoTexto}>{comu.descricao || "Bem-vindos à nossa comunidade!"}</p>
+          <p style={descricaoTexto}>{comu.descricao || "Bem-vindos!"}</p>
           
           {eDono && (
-            <button 
-              onClick={() => navigate(`/comunidades/${id}/gerenciar`)}
-              style={btnGerenciar}
-            >
-              ⚙️ Gerenciar Comunidade
+            <button onClick={() => navigate(`/comunidades/${id}/gerenciar`)} style={btnGerenciar}>
+              ⚙️ Gerenciar
             </button>
           )}
         </div>
       </SidebarEsquerda>
 
-      {/* COLUNA CENTRAL: INTERAÇÕES (FEED) */}
       <main style={{ flex: 1, minWidth: '0' }}>
         <div style={cardStyle}>
           <textarea 
@@ -103,42 +109,34 @@ function PaginaComunidade({ usuario }) {
           </div>
         </div>
 
-        {posts.length === 0 ? (
-          <p style={{textAlign: 'center', color: '#999', marginTop: '20px'}}>Nenhum post ainda. Seja o primeiro!</p>
-        ) : (
-          posts.map(p => (
-            <div key={p.id} style={{ ...cardStyle, marginBottom: '15px', marginTop: '15px' }}>
-              <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                <img src={p.autorFoto || 'https://via.placeholder.com/40'} style={avatarPost} alt="" />
-                <div>
-                  <strong style={{ display: 'block' }}>{p.autorNome}</strong>
-                  <small style={{ color: '#999' }}>
-                    {p.data?.toDate() ? p.data.toDate().toLocaleString() : 'Enviando...'}
-                  </small>
-                </div>
+        {posts.map(p => (
+          <div key={p.id} style={{ ...cardStyle, marginBottom: '15px', marginTop: '15px' }}>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              <img src={p.autorFoto || 'https://via.placeholder.com/40'} style={avatarPost} alt="" />
+              <div>
+                <strong style={{ display: 'block' }}>{p.autorNome}</strong>
+                <small style={{ color: '#999' }}>{p.data?.toDate()?.toLocaleString()}</small>
               </div>
-              <p style={{ marginTop: '15px', whiteSpace: 'pre-wrap' }}>{p.texto}</p>
             </div>
-          ))
-        )}
+            <p style={{ marginTop: '15px', whiteSpace: 'pre-wrap' }}>{p.texto}</p>
+          </div>
+        ))}
       </main>
 
-      {/* COLUNA DIREITA: MEMBROS */}
       <SidebarDireita>
         <div style={cardStyle}>
           <h4 style={{ marginBottom: '15px' }}>Membros ({comu.membrosCount || 0})</h4>
           <div style={gridMembros}>
-            {/* Onde os rostinhos aparecerão */}
+             {/* Rostinho estático por enquanto */}
             <div style={rostinhoPlaceholder}>👤</div>
           </div>
         </div>
       </SidebarDireita>
-
     </div>
   )
 }
 
-// ... (Mantenha seus estilos abaixo como estão)
+// Estilos (Mantenha os mesmos que você já tem abaixo do componente)
 const layoutGrid = { display: 'flex', gap: '20px', maxWidth: '1200px', margin: '0 auto', padding: '20px' };
 const cardStyle = { background: 'white', padding: '20px', borderRadius: '15px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' };
 const bannerEstilo = (cor) => ({ height: '100px', background: cor, borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' });
