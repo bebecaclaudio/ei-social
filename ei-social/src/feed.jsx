@@ -3,20 +3,57 @@ import { db } from './firebase-config'
 import { 
   collection, addDoc, onSnapshot, query, 
   orderBy, serverTimestamp, doc, updateDoc, increment, arrayUnion, arrayRemove,
-  deleteDoc 
+  deleteDoc, getDoc 
 } from 'firebase/firestore'
 
+// --- COMPONENTE PARA BUSCAR FOTO ATUALIZADA DO AUTOR ---
+function AvatarAutor({ uid, fallbackEmoji, tamanho = '40px' }) {
+  const [fotoUrl, setFotoUrl] = useState(null)
+
+  useEffect(() => {
+    if (!uid) return
+    const carregarFoto = async () => {
+      const userDoc = await getDoc(doc(db, "usuarios", uid))
+      if (userDoc.exists()) {
+        setFotoUrl(userDoc.data().foto)
+      }
+    }
+    carregarFoto()
+  }, [uid])
+
+  return (
+    <div style={{ 
+      width: tamanho, height: tamanho, borderRadius: '50%', 
+      overflow: 'hidden', background: '#eee', display: 'flex', 
+      alignItems: 'center', justifyContent: 'center' 
+    }}>
+      {fotoUrl ? (
+        <img src={fotoUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      ) : (
+        <span style={{ fontSize: parseInt(tamanho) * 0.6 + 'px' }}>{fallbackEmoji || '👤'}</span>
+      )}
+    </div>
+  )
+}
+
 function Feed({ usuario }) {
-  // --- ESTADOS ---
   const [posts, setPosts] = useState([])
   const [novoPost, setNovoPost] = useState('')
   const [focado, setFocado] = useState(false)
-  const [eiEnviados, setEiEnviados] = useState([]) // Controla o fundo AMARELO
-  
-  // Controles de Edição e Exclusão
+  const [eiEnviados, setEiEnviados] = useState([])
   const [postParaExcluir, setPostParaExcluir] = useState(null)
   const [editandoId, setEditandoId] = useState(null)
   const [textoEditado, setTextoEditado] = useState('')
+  const [minhaFotoAtual, setMinhaFotoAtual] = useState('') // Para o campo de postar
+
+  // Carregar minha foto atual para a área de "No que você está pensando?"
+  useEffect(() => {
+    if (!usuario?.uid) return
+    const unsub = onSnapshot(doc(db, "usuarios", usuario.uid), (docSnap) => {
+      if (docSnap.exists()) setMinhaFotoAtual(docSnap.data().foto)
+    })
+    return () => unsub()
+  }, [usuario])
 
   useEffect(() => {
     const q = query(collection(db, "posts"), orderBy("data", "desc"))
@@ -26,31 +63,18 @@ function Feed({ usuario }) {
     return () => unsub()
   }, [])
 
-  // --- FUNÇÃO EI! (RESTAURADA) ---
   function mandarEi(postId, nomeUsuario) {
     if (eiEnviados.includes(postId)) return 
-    
-    // 1. Muda a cor do botão para amarelo imediatamente
     setEiEnviados([...eiEnviados, postId])
-    
-    // 2. Notificação Nativa (A que pula na tela)
     if (Notification.permission === "granted") {
       new Notification("👋 Ei!", {
         body: `Você mandou um "Ei!" para ${nomeUsuario}`,
         icon: 'https://cdn-icons-png.flaticon.com/512/1611/1611733.png'
       });
     } else {
-      // Caso a permissão não esteja ativa, usa o alerta clássico
       alert(`👋 Ei mandado para ${nomeUsuario}!`);
     }
   }
-
-  // --- SOLICITAR PERMISSÃO DE NOTIFICAÇÃO ---
-  useEffect(() => {
-    if (Notification.permission !== "granted") {
-      Notification.requestPermission();
-    }
-  }, []);
 
   async function publicar() {
     if (novoPost.trim() === '') return
@@ -58,7 +82,8 @@ function Feed({ usuario }) {
       await addDoc(collection(db, "posts"), {
         autorUid: usuario?.uid,
         usuario: usuario?.displayName || 'Você',
-        avatar: usuario?.photoURL || '🧑',
+        // Salvamos o Base64 atual no post, mas o componente AvatarAutor garantirá a atualização futura
+        avatar: minhaFotoAtual || usuario?.photoURL || '🧑',
         texto: novoPost,
         curtidas: 0,
         curtidores: [], 
@@ -99,7 +124,6 @@ function Feed({ usuario }) {
   return (
     <div style={{ minHeight: '100vh', background: '#f0f2f5', paddingBottom: '80px' }}>
       
-      {/* MODAL DE EXCLUSÃO */}
       {postParaExcluir && (
         <div style={overlayStyle}>
           <div style={modalStyle}>
@@ -115,10 +139,15 @@ function Feed({ usuario }) {
 
       <div style={{ maxWidth: '600px', margin: '0 auto', padding: '24px 16px' }}>
         
-        {/* ÁREA DE POSTAR */}
+        {/* ÁREA DE POSTAR (CORRIGIDA) */}
         <div style={cardEstilo}>
           <div style={{ display: 'flex', gap: '12px' }}>
-            <span style={{ fontSize: '36px' }}>🧑</span>
+            {/* Foto do topo da área de postagem */}
+            <div style={{ width: '45px', height: '45px', borderRadius: '50%', overflow: 'hidden' }}>
+                {minhaFotoAtual ? (
+                    <img src={minhaFotoAtual} style={{width: '100%', height: '100%', objectFit: 'cover'}} />
+                ) : <span style={{fontSize: '36px'}}>🧑</span>}
+            </div>
             <textarea
               placeholder="No que você está pensando?"
               value={novoPost}
@@ -143,7 +172,6 @@ function Feed({ usuario }) {
           return (
             <div key={post.id} style={{...cardEstilo, position: 'relative' }}>
               
-              {/* ÍCONES DE DONO */}
               {souEu && !isEditando && (
                 <div style={{ position: 'absolute', top: '20px', right: '20px', display: 'flex', gap: '12px' }}>
                   <span title="Editar" onClick={() => { setEditandoId(post.id); setTextoEditado(post.texto); }} style={iconBtn}>✏️</span>
@@ -152,7 +180,9 @@ function Feed({ usuario }) {
               )}
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                <span style={{ fontSize: '40px' }}>{post.avatar}</span>
+                {/* AVATAR DINÂMICO NO FEED */}
+                <AvatarAutor uid={post.autorUid} fallbackEmoji={post.avatar} />
+                
                 <div>
                   <p style={{ fontWeight: 'bold', fontSize: '15px' }}>{post.usuario}</p>
                   <p style={{ color: '#888', fontSize: '12px' }}>{post.data?.toDate ? post.data.toDate().toLocaleTimeString() : 'agora'}</p>
@@ -176,7 +206,6 @@ function Feed({ usuario }) {
               )}
               
               <div style={barraAcoes}>
-                {/* CURTIR COM CONTORNO ROSA */}
                 <button 
                   onClick={() => curtir(post)} 
                   style={{
@@ -192,7 +221,6 @@ function Feed({ usuario }) {
 
                 <button style={{...btnAcao, padding: '6px 14px'}}>💬 Comentar</button>
 
-                {/* BOTÃO EI! COM FUNDO AMARELO REPLICADO */}
                 {!souEu && (
                   <button 
                     onClick={() => mandarEi(post.id, post.usuario)} 
@@ -216,7 +244,7 @@ function Feed({ usuario }) {
   )
 }
 
-// --- ESTILOS ---
+// Estilos mantidos (omitidos para brevidade, use os mesmos do seu código original)
 const overlayStyle = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, backdropFilter: 'blur(4px)' };
 const modalStyle = { background: 'white', padding: '30px', borderRadius: '20px', textAlign: 'center', width: '90%', maxWidth: '320px' };
 const btnDeleteConfirm = { background: '#ff3b30', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' };
