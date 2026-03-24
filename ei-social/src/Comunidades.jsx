@@ -76,6 +76,14 @@ function Comunidades({ usuario }) {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f0f2f5' }}>
+      <style>{`
+        input:-webkit-autofill,
+        input:-webkit-autofill:hover,
+        input:-webkit-autofill:focus {
+          -webkit-box-shadow: 0 0 0px 1000px white inset !important;
+          -webkit-text-fill-color: #111 !important;
+        }
+      `}</style>
       <div style={{ maxWidth: '700px', margin: '24px auto', padding: '0 16px' }}>
 
         {/* BUSCA E CRIAR */}
