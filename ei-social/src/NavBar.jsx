@@ -1,138 +1,66 @@
 import { useState, useEffect } from 'react'
 import { db } from './firebase-config'
-import { collection, query, where, onSnapshot, doc } from 'firebase/firestore'
+import { doc, onSnapshot } from 'firebase/firestore'
 
-function NavBar({ telaAtual, onFeed, onComunidades, onPerfil, onNotificacoes, usuario }) {
-  const [totalNotificacoes, setTotalNotificacoes] = useState(0)
+function NavBar({ usuario, telaAtual, onFeed, onComunidades, onPerfil, onNotificacoes }) {
   const [fotoExibir, setFotoExibir] = useState('')
 
-  // ESCUTAR DADOS DO USUÁRIO (FOTO) EM TEMPO REAL
   useEffect(() => {
     if (!usuario?.uid) return
 
-    // Criamos um "ouvinte" no Firestore para pegar a foto em Base64
-    const unsubPerfil = onSnapshot(doc(db, "usuarios", usuario.uid), (docSnap) => {
+    // Escuta o banco de dados em tempo real para atualizar a foto na barra
+    const unsub = onSnapshot(doc(db, "usuarios", usuario.uid), (docSnap) => {
       if (docSnap.exists()) {
-        const data = docSnap.data()
-        // PRIORIDADE: 1º Foto do Firestore (Base64) | 2º Foto do Google Auth | 3º Vazio
-        setFotoExibir(data.foto || usuario?.photoURL || '')
+        const dados = docSnap.data()
+        // PRIORIDADE: 1º Foto do banco (Base64) | 2º Foto do Google | 3º Vazio
+        setFotoExibir(dados.foto || usuario?.photoURL || '')
       } else {
-        // Se o documento no Firestore ainda não existe, usamos a do Google
         setFotoExibir(usuario?.photoURL || '')
       }
     })
 
-    return () => unsubPerfil()
+    return () => unsub()
   }, [usuario])
 
-  // ESCUTAR NOTIFICAÇÕES EM TEMPO REAL
-  useEffect(() => {
-    if (!usuario?.uid) return
-
-    const q = query(
-      collection(db, "notificacoes"),
-      where("paraUid", "==", usuario.uid),
-      where("lida", "==", false)
-    )
-
-    const unsubNotif = onSnapshot(q, (snapshot) => {
-      setTotalNotificacoes(snapshot.docs.length)
-    })
-
-    return () => unsubNotif()
-  }, [usuario])
-
-  const botoes = [
-    { label: 'Feed', emoji: '🏠', tela: 'feed', acao: onFeed },
-    { label: 'Comunidades', emoji: '👥', tela: 'comunidades', acao: onComunidades },
-    { label: 'Notificações', emoji: '🔔', tela: 'notificacoes', acao: onNotificacoes },
-    { label: 'Perfil', emoji: '👤', tela: 'perfil', acao: onPerfil },
-  ]
+  // Função de segurança para garantir que links virem <img> e não texto
+  const ehLink = (str) => typeof str === 'string' && (str.startsWith('http') || str.startsWith('data:image'));
 
   return (
-    <div style={navStyle}>
-      {botoes.map((botao) => {
-        const ativo = telaAtual === botao.tela
-        const ehNotificacao = botao.tela === 'notificacoes'
-        const ehPerfil = botao.tela === 'perfil'
+    <nav style={navStyle}>
+      <div style={containerStyle}>
+        <h2 style={{ color: 'white', margin: 0, cursor: 'pointer' }} onClick={onFeed}>Ei!</h2>
+        
+        <div style={menuStyle}>
+          <button onClick={onFeed} style={btnStyle(telaAtual === 'feed')}>🏠 Feed</button>
+          <button onClick={onComunidades} style={btnStyle(telaAtual === 'comunidades')}>👥 Comunidades</button>
+        </div>
 
-        return (
-          <button
-            key={botao.tela}
-            onClick={botao.acao}
-            style={{
-              ...btnBaseStyle,
-              background: ativo ? 'linear-gradient(135deg, #002776, #009c3b)' : 'none',
-            }}
-          >
-            {/* BADGE DE NOTIFICAÇÕES */}
-            {ehNotificacao && totalNotificacoes > 0 && (
-              <span style={badgeStyle}>{totalNotificacoes}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+          <button onClick={onNotificacoes} style={iconBtnStyle}>🔔</button>
+          
+          <div onClick={onPerfil} style={avatarStyle}>
+            {ehLink(fotoExibir) ? (
+              <img src={fotoExibir} alt="" style={imgStyle} />
+            ) : (
+              <span style={{ fontSize: '18px' }}>👤</span>
             )}
-
-            {/* ÍCONE OU FOTO DE PERFIL */}
-            <div style={avatarContainerStyle}>
-              {ehPerfil && fotoExibir ? (
-                <img 
-                  src={fotoExibir} 
-                  alt="Perfil" 
-                  style={imgStyle} 
-                />
-              ) : (
-                <span style={{ fontSize: '22px' }}>{botao.emoji}</span>
-              )}
-            </div>
-
-            <span style={{
-              fontSize: '11px', 
-              fontWeight: '700',
-              color: ativo ? 'white' : '#888'
-            }}>
-              {botao.label}
-            </span>
-          </button>
-        )
-      })}
-    </div>
+          </div>
+          
+          <button onClick={() => window.location.reload()} style={logoutBtnStyle}>Sair</button>
+        </div>
+      </div>
+    </nav>
   )
 }
 
-// --- ESTILOS ---
-const navStyle = {
-  position: 'fixed', bottom: 0, left: 0, right: 0,
-  background: 'white', borderTop: '1px solid #eee',
-  display: 'flex', justifyContent: 'space-around',
-  alignItems: 'center', padding: '8px 0 12px', 
-  zIndex: 1000,
-  boxShadow: '0 -4px 20px rgba(0,0,0,0.08)'
-};
-
-const btnBaseStyle = {
-  display: 'flex', flexDirection: 'column', alignItems: 'center',
-  gap: '4px', border: 'none', background: 'none', cursor: 'pointer',
-  padding: '8px 16px', borderRadius: '12px',
-  transition: 'all 0.2s', position: 'relative'
-};
-
-const avatarContainerStyle = {
-  width: '26px', height: '26px', borderRadius: '50%',
-  overflow: 'hidden', display: 'flex', alignItems: 'center',
-  justifyContent: 'center', background: '#f0f0f0'
-};
-
-const imgStyle = { 
-  width: '100%', 
-  height: '100%', 
-  objectFit: 'cover' 
-};
-
-const badgeStyle = {
-  position: 'absolute', top: '4px', right: '14px',
-  background: '#ff3b30', color: 'white', fontSize: '10px',
-  fontWeight: 'bold', minWidth: '18px', height: '18px',
-  borderRadius: '50%', display: 'flex', alignItems: 'center',
-  justifyContent: 'center', border: '2px solid white',
-  boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-};
+// Estilos mantendo seu padrão visual
+const navStyle = { background: '#009c3b', padding: '10px 0', position: 'sticky', top: 0, zIndex: 1000 };
+const containerStyle = { maxWidth: '1000px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 20px' };
+const menuStyle = { display: 'flex', gap: '15px' };
+const btnStyle = (ativo) => ({ background: ativo ? 'rgba(255,255,255,0.2)' : 'none', border: 'none', color: 'white', fontWeight: 'bold', cursor: 'pointer', padding: '8px 12px', borderRadius: '8px' });
+const avatarStyle = { width: '34px', height: '34px', borderRadius: '50%', overflow: 'hidden', cursor: 'pointer', background: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid white' };
+const imgStyle = { width: '100%', height: '100%', objectFit: 'cover' };
+const iconBtnStyle = { background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer' };
+const logoutBtnStyle = { background: 'rgba(255,255,255,0.2)', border: 'none', color: 'white', padding: '5px 15px', borderRadius: '20px', cursor: 'pointer', marginLeft: '10px' };
 
 export default NavBar;
