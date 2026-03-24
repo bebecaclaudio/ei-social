@@ -1,9 +1,25 @@
 import { useState, useEffect } from 'react'
 import { db } from './firebase-config'
-import { collection, query, where, onSnapshot } from 'firebase/firestore'
+import { collection, query, where, onSnapshot, doc } from 'firebase/firestore'
 
 function NavBar({ telaAtual, onFeed, onComunidades, onPerfil, onNotificacoes, usuarioUid }) {
   const [totalNotificacoes, setTotalNotificacoes] = useState(0)
+  const [fotoPerfil, setFotoPerfil] = useState('') // Estado para a foto em Base64
+
+  // ESCUTAR DADOS DO USUÁRIO (FOTO DE PERFIL) EM TEMPO REAL
+  useEffect(() => {
+    if (!usuarioUid) return
+
+    // Criamos um "ouvinte" direto no documento do usuário no Firestore
+    const unsubPerfil = onSnapshot(doc(db, "usuarios", usuarioUid), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data()
+        setFotoPerfil(data.foto || '') // Pega a string Base64 do campo 'foto'
+      }
+    })
+
+    return () => unsubPerfil()
+  }, [usuarioUid])
 
   // ESCUTAR NOTIFICAÇÕES EM TEMPO REAL
   useEffect(() => {
@@ -15,11 +31,11 @@ function NavBar({ telaAtual, onFeed, onComunidades, onPerfil, onNotificacoes, us
       where("lida", "==", false)
     )
 
-    const unsub = onSnapshot(q, (snapshot) => {
+    const unsubNotif = onSnapshot(q, (snapshot) => {
       setTotalNotificacoes(snapshot.docs.length)
     })
 
-    return () => unsub()
+    return () => unsubNotif()
   }, [usuarioUid])
 
   const botoes = [
@@ -35,12 +51,13 @@ function NavBar({ telaAtual, onFeed, onComunidades, onPerfil, onNotificacoes, us
       background: 'white', borderTop: '1px solid #eee',
       display: 'flex', justifyContent: 'space-around',
       alignItems: 'center', padding: '8px 0 12px', 
-      zIndex: 1000, // Ajustado para garantir que fique no topo
+      zIndex: 1000,
       boxShadow: '0 -4px 20px rgba(0,0,0,0.08)'
     }}>
       {botoes.map(function(botao) {
         const ativo = telaAtual === botao.tela
         const ehNotificacao = botao.tela === 'notificacoes'
+        const ehPerfil = botao.tela === 'perfil'
 
         return (
           <button
@@ -68,7 +85,23 @@ function NavBar({ telaAtual, onFeed, onComunidades, onPerfil, onNotificacoes, us
               </span>
             )}
 
-            <span style={{ fontSize: '22px' }}>{botao.emoji}</span>
+            {/* ÍCONE OU FOTO DE PERFIL */}
+            <div style={{
+              width: '26px', height: '26px', borderRadius: '50%',
+              overflow: 'hidden', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', background: '#f0f0f0'
+            }}>
+              {ehPerfil && fotoPerfil ? (
+                <img 
+                  src={fotoPerfil} 
+                  alt="Perfil" 
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                />
+              ) : (
+                <span style={{ fontSize: '22px' }}>{botao.emoji}</span>
+              )}
+            </div>
+
             <span style={{
               fontSize: '11px', fontWeight: '700',
               color: ativo ? 'white' : '#888'
