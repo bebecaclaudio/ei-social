@@ -4,10 +4,11 @@ import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
 import Cropper from 'react-easy-crop'
 
+// Função auxiliar para processar o recorte da imagem
 const getCroppedImg = async (imageSrc, crop) => {
   const image = await new Promise((resolve, reject) => {
     const img = new Image();
-    // ESSA LINHA AJUDA A EVITAR O TRAVAMENTO NO "PROCESSANDO"
+    // ESSA LINHA É O SEGREDO: Deve vir antes do .src para evitar o "Processando" infinito
     img.setAttribute('crossOrigin', 'anonymous'); 
     img.src = imageSrc;
     img.onload = () => resolve(img);
@@ -68,6 +69,7 @@ function Perfil({ usuario }) {
             bio: data.bio || '',
             local: data.local || ''
           })
+          // Agora focado apenas no campo 'foto' para manter o banco limpo
           setFoto(data.foto || usuario.photoURL || '')
         } else {
           setDadosPerfil({ nome: usuario.displayName || 'Usuário', bio: '', local: '' })
@@ -98,9 +100,14 @@ function Perfil({ usuario }) {
       const url = await getDownloadURL(storageRef)
       
       setFoto(url)
-      await setDoc(doc(db, 'usuarios', usuario.uid), { foto: url }, { merge: true })
+      // Atualiza o Firestore garantindo que salve no campo 'foto' e não crie duplicatas
+      await setDoc(doc(db, 'usuarios', usuario.uid), { 
+        foto: url,
+        ultimaAtualizacao: new Date() 
+      }, { merge: true })
+      
       setImagemParaCortar(null)
-    } catch (e) { alert("Erro ao salvar imagem.") }
+    } catch (e) { alert("Erro ao salvar imagem."); console.error(e); }
     finally { setSubindoFoto(false) }
   }
 
@@ -128,7 +135,9 @@ function Perfil({ usuario }) {
             <input type="range" value={zoom} min={1} max={3} step={0.1} onChange={(e) => setZoom(e.target.value)} style={{ width: '100%' }} />
             <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
               <button onClick={() => setImagemParaCortar(null)} style={btnCancel}>Cancelar</button>
-              <button onClick={confirmarCorte} style={btnConfirm}>{subindoFoto ? 'Processando...' : 'Confirmar Foto'}</button>
+              <button onClick={confirmarCorte} disabled={subindoFoto} style={btnConfirm}>
+                {subindoFoto ? 'Processando...' : 'Confirmar Foto'}
+              </button>
             </div>
           </div>
         </div>
@@ -184,7 +193,6 @@ function Perfil({ usuario }) {
           )}
         </div>
 
-        {/* BOTÃO COM TEXTO EM PRETO PARA MELHOR CONTRASTE */}
         <button onClick={() => setEditando(!editando)} style={btnEdit}>
           {editando ? 'Cancelar' : 'Editar Perfil'}
         </button>
@@ -195,12 +203,13 @@ function Perfil({ usuario }) {
           <div style={formStyle}>
             <input value={dadosPerfil.nome} onChange={e => setDadosPerfil({...dadosPerfil, nome: e.target.value})} style={inputStyle} placeholder="Nome" />
             <input value={dadosPerfil.local} onChange={e => setDadosPerfil({...dadosPerfil, local: e.target.value})} style={inputStyle} placeholder="Cidade, Estado" />
-            <textarea value={dadosPerfil.bio} onChange={e => setDadosPerfil({...dadosPerfil, bio: e.target.value})} style={textareaStyle} placeholder="Escreva algo sobre você..." />
+            <textarea value={dadosPerfil.bio} onChange={e => setDadosPerfil({...dadosPerfil, bio: e.target.value})} style={textareaStyle} placeholder="Bio..." />
             <button onClick={salvarTexto} style={btnSave}>Salvar Alterações</button>
           </div>
         ) : (
           <>
-            <h2 style={{ fontSize: '26px', margin: '0 0 5px' }}>{dadosPerfil.nome}</h2>
+            {/* NOME DO PERFIL EM PRETO (#000) E DESTAQUE */}
+            <h2 style={{ fontSize: '32px', margin: '0 0 5px', color: '#000', fontWeight: 'bold' }}>{dadosPerfil.nome}</h2>
             <p style={{ color: '#666', fontSize: '14px', margin: '0 0 15px' }}>📍 {dadosPerfil.local || 'Explorando o mundo'}</p>
             <p style={{ maxWidth: '450px', margin: '0 auto', color: '#444', lineHeight: '1.6', whiteSpace: 'pre-wrap' }}>
               {dadosPerfil.bio || 'Bem-vindo ao meu perfil!'}
@@ -212,6 +221,7 @@ function Perfil({ usuario }) {
   )
 }
 
+// ESTILOS
 const modalOverlay = { position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.95)', zIndex: 1000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' };
 const cropContainer = { position: 'relative', width: '320px', height: '320px', background: '#333', borderRadius: '12px', overflow: 'hidden' };
 const avatarWrapper = { position: 'absolute', bottom: '-50px', left: '50%', transform: 'translateX(-50%)', zIndex: 10 };
@@ -220,7 +230,6 @@ const cameraOverlay = { position: 'absolute', inset: 0, background: 'rgba(0,0,0,
 const menuDropdown = { position: 'absolute', top: '130px', left: '50%', transform: 'translateX(-50%)', background: 'white', padding: '10px', borderRadius: '15px', boxShadow: '0 8px 30px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column', gap: '5px', minWidth: '160px' };
 const menuItem = { padding: '10px', textAlign: 'center', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px', borderRadius: '8px', background: '#f8f9fa' };
 
-// ESTILO DO BOTÃO EDITAR COM TEXTO PRETO (#000)
 const btnEdit = { 
   position: 'absolute', 
   right: '20px', 
@@ -229,7 +238,7 @@ const btnEdit = {
   borderRadius: '25px', 
   border: 'none', 
   background: 'white', 
-  color: '#000', 
+  color: '#000', // Texto preto para contraste no fundo claro
   fontWeight: 'bold', 
   cursor: 'pointer', 
   boxShadow: '0 2px 10px rgba(0,0,0,0.1)' 
