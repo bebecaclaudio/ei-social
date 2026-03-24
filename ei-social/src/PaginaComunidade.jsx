@@ -1,294 +1,240 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import { db } from './firebase-config';
+import { useState, useEffect } from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
+import { db } from './firebase-config'
 import { 
   doc, onSnapshot, collection, query, where, orderBy, 
-  addDoc, serverTimestamp, getDoc, updateDoc, arrayUnion, arrayRemove, limit 
-} from 'firebase/firestore';
-import { SidebarEsquerda, SidebarDireita } from './Sidebars';
+  addDoc, serverTimestamp, getDoc, updateDoc, arrayUnion, arrayRemove 
+} from 'firebase/firestore'
+import { SidebarEsquerda, SidebarDireita } from './Sidebars'
 
-// --- COMPONENTE AVATAR (MEMÓRIA OTIMIZADA) ---
-const AvatarAutor = React.memo(({ uid, fallbackEmoji, tamanho = '40px' }) => {
-  const [fotoUrl, setFotoUrl] = useState(null);
-
+// --- AVATAR COM SINCRO EM TEMPO REAL ---
+function AvatarAutor({ uid, fallbackFoto, tamanho = '42px' }) {
+  const [fotoUrl, setFotoUrl] = useState(null)
   useEffect(() => {
-    if (!uid) return;
-    const carregarFoto = async () => {
-      try {
-        const userDoc = await getDoc(doc(db, "usuarios", uid));
-        if (userDoc.exists()) setFotoUrl(userDoc.data().foto);
-      } catch (e) { console.error("Erro ao buscar avatar:", e); }
-    };
-    carregarFoto();
-  }, [uid]);
-
-  const ehLink = (str) => typeof str === 'string' && (str.startsWith('http') || str.startsWith('data:image'));
-  const imagemParaExibir = fotoUrl || (ehLink(fallbackEmoji) ? fallbackEmoji : null);
+    if (!uid) return
+    return onSnapshot(doc(db, "usuarios", uid), (d) => {
+      if (d.exists()) setFotoUrl(d.data().foto)
+    })
+  }, [uid])
 
   return (
-    <div style={{ 
-      width: tamanho, height: tamanho, borderRadius: '50%', 
-      overflow: 'hidden', background: '#f0f0f0', display: 'flex', 
-      alignItems: 'center', justifyContent: 'center', border: '1.5px solid #eee', flexShrink: 0
-    }}>
-      {imagemParaExibir ? (
-        <img src={imagemParaExibir} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-      ) : (
-        <span style={{ fontSize: parseInt(tamanho) * 0.5 + 'px' }}>
-          {fallbackEmoji && !ehLink(fallbackEmoji) ? fallbackEmoji : '👤'}
-        </span>
-      )}
+    <div style={{ width: tamanho, height: tamanho, borderRadius: '50%', overflow: 'hidden', background: '#f0f0f0', flexShrink: 0, border: '1px solid #eee' }}>
+      <img src={fotoUrl || fallbackFoto || 'https://via.placeholder.com/40'} style={{width:'100%', height:'100%', objectFit:'cover'}} alt="" />
     </div>
-  );
-});
+  )
+}
 
 function PaginaComunidade({ usuario }) {
-  const { id } = useParams(); 
-  const navigate = useNavigate();
+  const { id } = useParams() 
+  const navigate = useNavigate()
   
-  // Estados de Dados
-  const [comu, setComu] = useState(null);
-  const [posts, setPosts] = useState([]);
-  const [novoPost, setNovoPost] = useState('');
+  const [comu, setComu] = useState(null)
+  const [posts, setPosts] = useState([])
+  const [novoPost, setNovoPost] = useState('')
+  const [enviando, setEnviando] = useState(false)
+  const [abaAtiva, setAbaAtiva] = useState('feed') 
+  const [larguraJanela, setLarguraJanela] = useState(window.innerWidth)
   
-  // Estados de Controle
-  const [carregando, setCarregando] = useState(true);
-  const [enviando, setEnviando] = useState(false);
-  const [larguraJanela, setLarguraJanela] = useState(window.innerWidth);
-  const isMobile = larguraJanela < 768;
+  const isMobile = larguraJanela < 768
 
-  // Listener de Redimensionamento
   useEffect(() => {
-    const handleResize = () => setLarguraJanela(window.innerWidth);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+    const handleResize = () => setLarguraJanela(window.innerWidth)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
-  // 1. Monitorar Dados da Comunidade (Real-time)
   useEffect(() => {
-    setCarregando(true);
-    const q = query(collection(db, "comunidades"), where("slug", "==", id));
-    const unsub = onSnapshot(q, (snapshot) => {
-      if (!snapshot.empty) {
-        setComu({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() });
-      } else {
-        setComu(null);
-      }
-      setCarregando(false);
-    }, (error) => {
-      console.error("Erro Firestore (Comunidade):", error);
-      setCarregando(false);
-    });
-    return () => unsub();
-  }, [id]);
+    const q = query(collection(db, "comunidades"), where("slug", "==", id))
+    return onSnapshot(q, (snapshot) => {
+      if (!snapshot.empty) setComu({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() })
+    })
+  }, [id])
 
-  // 2. Monitorar Posts (Real-time com Ordenação)
   useEffect(() => {
-    if (!comu?.id) return;
-    const q = query(
-      collection(db, "posts_comunidades"), 
-      where("comunidadeId", "==", comu.id), 
-      orderBy("data", "desc"),
-      limit(50) // Performance: carrega apenas os 50 últimos
-    );
-    
-    const unsub = onSnapshot(q, (snap) => {
-      const listaPosts = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      setPosts(listaPosts);
-    }, (err) => {
-      console.error("Erro Firestore (Posts) - Verifique se o Índice foi criado:", err);
-    });
-    return () => unsub();
-  }, [comu?.id]);
+    if (!comu?.id) return
+    const q = query(collection(db, "posts_comunidades"), where("comunidadeId", "==", comu.id), orderBy("data", "desc"))
+    return onSnapshot(q, (snap) => {
+      setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    })
+  }, [comu?.id])
 
-  // Ação de Postar
-  const enviarPost = async () => {
-    if (!novoPost.trim() || enviando || !usuario) return;
-    setEnviando(true);
-    
-    try {
-      const userRef = doc(db, "usuarios", usuario.uid);
-      const userSnap = await getDoc(userRef);
-      const fotoAtual = userSnap.exists() ? userSnap.data().foto : (usuario.photoURL || "");
+  const eAutor = comu?.criadoPor === usuario?.uid
 
-      await addDoc(collection(db, "posts_comunidades"), {
-        comunidadeId: comu.id,
-        autorUid: usuario.uid,
-        autorNome: usuario.displayName || "Explorador",
-        autorFoto: fotoAtual, 
-        texto: novoPost,
-        data: serverTimestamp(),
-        curtidas: [],
-        salvos: [],
-        reposts: 0,
-        comentariosCount: 0
-      });
-      setNovoPost('');
-    } catch (e) {
-      alert("Houve um erro ao fragmentar sua ideia. Tente novamente.");
-    } finally {
-      setEnviando(false);
-    }
-  };
+  async function enviarPost() {
+    if (!novoPost.trim() || !comu?.id || !usuario?.uid || enviando) return
+    setEnviando(true)
+    await addDoc(collection(db, "posts_comunidades"), {
+      comunidadeId: comu.id,
+      autorUid: usuario.uid,
+      autorNome: usuario.displayName || "Membro",
+      autorFoto: usuario.foto || usuario.photoURL || "",
+      texto: novoPost,
+      data: serverTimestamp(),
+      curtidas: [],
+      reposts: [],
+      comentariosCount: 0
+    })
+    setNovoPost('')
+    setEnviando(false)
+  }
 
-  // Funções de Interação (Like/Save)
-  const handleInteraction = async (postId, campo, acao) => {
-    if (!usuario) return;
-    const postRef = doc(db, "posts_comunidades", postId);
-    try {
-      await updateDoc(postRef, {
-        [campo]: acao === 'add' ? arrayUnion(usuario.uid) : arrayRemove(usuario.uid)
-      });
-    } catch (e) { console.error("Falha na interação:", e); }
-  };
-
-  if (carregando) return <div style={msgAviso}>Sincronizando Fragmentos...</div>;
-  if (!comu) return <div style={msgAviso}>Essa constelação (comunidade) não foi encontrada.</div>;
-
-  const minhaFoto = usuario?.foto || usuario?.photoURL || '👤';
+  if (!comu) return <div style={msgAviso}>Conectando à rede...</div>
 
   return (
     <div style={containerPrincipal}>
       {/* HEADER DINÂMICO */}
-      <div style={bannerHero(comu.capaUrl || comu.corCapa || '#002776', isMobile)}>
-        <div style={iconeBanner(isMobile)}>{comu.emoji || '👥'}</div>
+      <div style={bannerHeroStyle(comu.capaUrl || comu.corCapa || '#002776', isMobile)}>
+        <div style={iconeBannerWrapper(isMobile)}>{comu.emoji || '✨'}</div>
       </div>
 
+      {/* NAVEGAÇÃO MOBILE (3 ABAS) */}
+      {isMobile && (
+        <div style={tabContainer}>
+          <button onClick={() => setAbaAtiva('feed')} style={abaAtiva === 'feed' ? tabAtiva : tabInativa}>Feed</button>
+          <button onClick={() => setAbaAtiva('sobre')} style={abaAtiva === 'sobre' ? tabAtiva : tabInativa}>Sobre</button>
+          {eAutor && (
+            <button onClick={() => setAbaAtiva('gestao')} style={abaAtiva === 'gestao' ? tabAtivaGestao : tabInativa}>Gestão ⚙️</button>
+          )}
+        </div>
+      )}
+
       <div style={layoutGrid(isMobile)}>
+        
+        {/* COLUNA 1: SIDEBAR ESQUERDA (Desktop) */}
         {!isMobile && (
           <SidebarEsquerda>
             <div style={cardStyle}>
-              <h2 style={tituloComu}>{comu.nome}</h2>
-              <div style={{ textAlign: 'center' }}>
-                <span style={badgeStyle}>{comu.categoria}</span>
-              </div>
-              <p style={descricaoTexto}>{comu.descricao || "Bem-vindos à nossa frequência."}</p>
-              
-              {comu.criadoPor === usuario?.uid && (
-                <button onClick={() => navigate(`/comunidades/${id}/gerenciar`)} style={btnGerenciar}>
-                  ⚙️ Configurações
-                </button>
+              <h2 style={sTitle}>{comu.nome}</h2>
+              <span style={badgeStyle}>{comu.categoria}</span>
+              <p style={descricaoTexto}>{comu.descricao}</p>
+              {eAutor && (
+                <button onClick={() => navigate(`/comunidades/${id}/gerenciar`)} style={btnAdmin}>Painel do Criador</button>
               )}
             </div>
           </SidebarEsquerda>
         )}
 
+        {/* COLUNA 2: CONTEÚDO PRINCIPAL */}
         <main style={{ flex: isMobile ? '1 1 100%' : '1', minWidth: '0' }}>
-          {/* ÁREA DE CRIAÇÃO */}
-          <div style={{ ...cardStyle, marginBottom: '20px' }}>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <AvatarAutor uid={usuario?.uid} fallbackEmoji={minhaFoto} tamanho="48px" />
-              <textarea 
-                placeholder={`O que você quer concatenar hoje em ${comu.nome}?`}
-                value={novoPost}
-                onChange={(e) => setNovoPost(e.target.value)}
-                style={textareaStyle}
-                disabled={enviando}
-              />
-            </div>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
-              <button 
-                onClick={enviarPost} 
-                style={{ ...btnPostar, opacity: (enviando || !novoPost.trim()) ? 0.6 : 1 }}
-                disabled={enviando || !novoPost.trim()}
-              >
-                {enviando ? 'Enviando...' : 'Postar'}
-              </button>
-            </div>
-          </div>
+          
+          {/* FEED */}
+          {(abaAtiva === 'feed' || !isMobile) && (
+            <>
+              <div style={cardPostar}>
+                <AvatarAutor uid={usuario?.uid} fallbackFoto={usuario?.photoURL} />
+                <div style={{flex: 1}}>
+                  <textarea 
+                    placeholder="Partilhe um fragmento de ideia..."
+                    value={novoPost} onChange={(e) => setNovoPost(e.target.value)} 
+                    style={textareaStyle}
+                  />
+                  <div style={{display: 'flex', justifyContent: 'flex-end', marginTop: '10px'}}>
+                    <button onClick={enviarPost} style={btnPostar}>Fragmentar</button>
+                  </div>
+                </div>
+              </div>
 
-          {/* LISTA DE POSTS (FEED) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {posts.map(p => {
-              const jaCurtiu = p.curtidas?.includes(usuario?.uid);
-              const jaSalvou = p.salvos?.includes(usuario?.uid);
-
-              return (
-                <article key={p.id} style={cardPost}>
-                  <header style={headerPost}>
-                    <AvatarAutor uid={p.autorUid} fallbackEmoji={p.autorFoto} />
-                    <div style={{ flex: 1 }}>
-                      <span style={nomeAutor}>{p.autorNome}</span>
-                      <time style={dataPost}>{p.data?.toDate()?.toLocaleDateString()} às {p.data?.toDate()?.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</time>
+              {posts.map(p => (
+                <article key={p.id} style={postCardStyle}>
+                  <div style={headerPost}>
+                    <AvatarAutor uid={p.autorUid} fallbackFoto={p.autorFoto} />
+                    <div>
+                      <strong style={nomeAutor}>{p.autorNome}</strong>
+                      <small style={dataPost}>{p.data?.toDate()?.toLocaleDateString()}</small>
                     </div>
-                  </header>
-
+                  </div>
+                  
                   <Link to={`/post/${p.id}`} style={linkPost}>
                     <p style={corpoPost}>{p.texto}</p>
                   </Link>
 
-                  <footer style={footerPost}>
-                    <button 
-                      onClick={() => handleInteraction(p.id, 'curtidas', jaCurtiu ? 'remove' : 'add')}
-                      style={btnAcao(jaCurtiu, '#ff4b4b')}
-                    >
-                      {jaCurtiu ? '❤️' : '🤍'} <span>{p.curtidas?.length || 0}</span>
-                    </button>
-
-                    <Link to={`/post/${p.id}`} style={btnAcao(false, '#002776')}>
-                      💬 <span>{p.comentariosCount || 0}</span>
-                    </Link>
-
-                    <button style={btnAcao(false, '#009c3b')}>
-                      🔄 <span>{p.reposts || 0}</span>
-                    </button>
-
-                    <button 
-                      onClick={() => handleInteraction(p.id, 'salvos', jaSalvou ? 'remove' : 'add')}
-                      style={btnAcao(jaSalvou, '#ffdf00')}
-                    >
-                      {jaSalvou ? '⭐' : '☆'}
-                    </button>
-                  </footer>
+                  <div style={barraInteracao}>
+                    <button style={btnAcao}>🤍 {p.curtidas?.length || 0}</button>
+                    <Link to={`/post/${p.id}`} style={btnAcao}>💬 {p.comentariosCount || 0}</Link>
+                    <button style={btnAcao}>🔄</button>
+                    <button style={btnAcao}>🔗</button>
+                  </div>
                 </article>
-              );
-            })}
-          </div>
+              ))}
+            </>
+          )}
+
+          {/* ABA SOBRE & MEMBROS (Mobile) */}
+          {isMobile && abaAtiva === 'sobre' && (
+            <div style={cardStyle}>
+              <h2 style={sTitle}>Sobre a Comunidade</h2>
+              <p style={descricaoTexto}>{comu.descricao}</p>
+              <div style={divisor} />
+              <h4>Membros Ativos ({comu.membrosCount || 1})</h4>
+              <div style={gridMembros}>
+                <AvatarAutor uid={usuario?.uid} fallbackFoto={usuario?.photoURL} />
+              </div>
+            </div>
+          )}
+
+          {/* ABA GESTÃO (Apenas Mobile para o Autor) */}
+          {isMobile && abaAtiva === 'gestao' && (
+            <div style={cardStyle}>
+              <h2 style={{color: '#d32f2f', fontSize: '20px'}}>Centro de Comando</h2>
+              <p style={descricaoTexto}>Controle as permissões e a alma da sua comunidade.</p>
+              
+              <div style={listaGestao}>
+                <button onClick={() => navigate(`/comunidades/${id}/editar`)} style={itemGestao}>✏️ Editar Perfil e Cores</button>
+                <button style={itemGestao}>👥 Gerir Moderadores</button>
+                <button style={itemGestao}>🚫 Membros Banidos</button>
+                <button style={itemGestao}>📊 Estatísticas de Crescimento</button>
+              </div>
+            </div>
+          )}
         </main>
+
+        {/* COLUNA 3: SIDEBAR DIREITA (Desktop) */}
+        {!isMobile && (
+          <SidebarDireita>
+            <div style={cardStyle}>
+              <h4 style={sSubTitle}>Exploradores</h4>
+              <div style={gridMembros}>
+                <AvatarAutor uid={usuario?.uid} fallbackFoto={usuario?.photoURL} tamanho="35px" />
+              </div>
+            </div>
+          </SidebarDireita>
+        )}
+
       </div>
     </div>
-  );
+  )
 }
 
-// --- DESIGN SYSTEM (SOPHISTICATED & CLEAN) ---
-const containerPrincipal = { maxWidth: '1100px', margin: '0 auto', padding: '0 10px' };
-const bannerHero = (capa, isMobile) => ({
-  width: '100%', height: isMobile ? '150px' : '260px',
-  background: capa?.startsWith('http') || capa?.startsWith('data') ? `url(${capa}) center/cover no-repeat` : capa,
-  borderRadius: '0 0 24px 24px', position: 'relative'
-});
-const iconeBanner = (isMobile) => ({
-  width: isMobile ? '70px' : '90px', height: isMobile ? '70px' : '90px',
-  background: 'white', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-  fontSize: isMobile ? '35px' : '45px', position: 'absolute', bottom: '-35px',
-  left: isMobile ? '50%' : '40px', transform: isMobile ? 'translateX(-50%)' : 'none',
-  boxShadow: '0 8px 20px rgba(0,0,0,0.1)', border: '4px solid white'
-});
-
-const layoutGrid = (isMobile) => ({ display: 'flex', gap: '24px', marginTop: isMobile ? '50px' : '40px', paddingBottom: '80px' });
-const cardStyle = { background: 'white', padding: '20px', borderRadius: '18px', border: '1px solid #f0f0f0', boxShadow: '0 2px 10px rgba(0,0,0,0.02)' };
-
-const cardPost = { ...cardStyle, transition: 'transform 0.2s', ':hover': { transform: 'translateY(-2px)' } };
-const headerPost = { display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '15px' };
-const nomeAutor = { display: 'block', fontWeight: 'bold', color: '#1a1a1a', fontSize: '15px' };
-const dataPost = { fontSize: '12px', color: '#999' };
-const linkPost = { textDecoration: 'none', color: 'inherit', display: 'block' };
-const corpoPost = { fontSize: '16px', color: '#333', lineHeight: '1.6', whiteSpace: 'pre-wrap', margin: '0 0 15px 0' };
-const footerPost = { display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #f5f5f5', paddingTop: '12px' };
-
-const btnAcao = (ativo, cor) => ({
-  background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px',
-  color: ativo ? cor : '#666', display: 'flex', alignItems: 'center', gap: '6px',
-  fontWeight: '600', padding: '6px 10px', borderRadius: '8px', transition: '0.2s'
-});
-
-const tituloComu = { fontSize: '22px', color: '#002776', textAlign: 'center', margin: '0 0 10px 0' };
-const badgeStyle = { background: '#f0f4ff', color: '#002776', padding: '5px 15px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' };
-const descricaoTexto = { fontSize: '14px', color: '#666', textAlign: 'center', marginTop: '15px', lineHeight: '1.5' };
-const btnGerenciar = { width: '100%', marginTop: '15px', padding: '10px', borderRadius: '10px', border: 'none', background: '#002776', color: 'white', fontWeight: 'bold', cursor: 'pointer' };
-
-const textareaStyle = { flex: 1, minHeight: '90px', border: '1px solid #eee', borderRadius: '15px', padding: '15px', outline: 'none', resize: 'none', fontSize: '15px', backgroundColor: '#fafafa' };
-const btnPostar = { background: '#009c3b', color: 'white', border: 'none', padding: '10px 25px', borderRadius: '25px', fontWeight: 'bold', cursor: 'pointer' };
-const msgAviso = { padding: '100px', textAlign: 'center', color: '#888' };
+// --- DESIGN SYSTEM (SOPHISTICATED) ---
+const containerPrincipal = { maxWidth: '1200px', margin: '0 auto', padding: '0 15px' };
+const bannerHeroStyle = (c, m) => ({ width: '100%', height: m ? '160px' : '300px', background: c?.startsWith('http') ? `url(${c}) center/cover` : c, borderRadius: m ? '0' : '0 0 30px 30px', position: 'relative' });
+const iconeBannerWrapper = (m) => ({ width: m ? '70px' : '100px', height: m ? '70px' : '100px', background: 'white', borderRadius: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: m ? '35px' : '50px', position: 'absolute', bottom: '-35px', left: m ? '50%' : '40px', transform: m ? 'translateX(-50%)' : 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' });
+const layoutGrid = (m) => ({ display: 'flex', gap: '30px', marginTop: m ? '60px' : '40px', paddingBottom: '100px' });
+const cardStyle = { background: 'white', padding: '25px', borderRadius: '22px', border: '1px solid #f0f0f0', boxShadow: '0 4px 12px rgba(0,0,0,0.03)' };
+const postCardStyle = { ...cardStyle, marginBottom: '20px' };
+const cardPostar = { ...cardStyle, display: 'flex', gap: '15px', marginBottom: '30px' };
+const sTitle = { fontSize: '24px', fontWeight: '800', color: '#1a1a1a', marginBottom: '8px' };
+const badgeStyle = { background: '#f0f4ff', color: '#002776', padding: '6px 14px', borderRadius: '20px', fontSize: '11px', fontWeight: 'bold' };
+const descricaoTexto = { color: '#666', lineHeight: '1.6', fontSize: '14px', marginTop: '12px' };
+const btnAdmin = { width: '100%', marginTop: '20px', padding: '12px', borderRadius: '14px', border: 'none', background: '#002776', color: 'white', fontWeight: 'bold', cursor: 'pointer' };
+const textareaStyle = { width: '100%', border: 'none', outline: 'none', fontSize: '16px', resize: 'none', minHeight: '60px', background: 'transparent' };
+const btnPostar = { background: '#009c3b', color: 'white', border: 'none', padding: '10px 25px', borderRadius: '25px', fontWeight: 'bold' };
+const barraInteracao = { display: 'flex', justifyContent: 'space-between', marginTop: '18px', borderTop: '1px solid #f9f9f9', paddingTop: '15px' };
+const btnAcao = { background: 'none', border: 'none', color: '#888', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px', textDecoration: 'none' };
+const tabContainer = { display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '50px', padding: '0 10px' };
+const tabAtiva = { flex: 1, padding: '12px', border: 'none', background: 'none', borderBottom: '3px solid #002776', fontWeight: 'bold', color: '#002776' };
+const tabAtivaGestao = { ...tabAtiva, borderBottomColor: '#d32f2f', color: '#d32f2f' };
+const tabInativa = { flex: 1, padding: '12px', border: 'none', background: 'none', color: '#999' };
+const itemGestao = { width: '100%', padding: '15px', textAlign: 'left', background: '#f8f9fa', border: '1px solid #eee', borderRadius: '12px', marginBottom: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '500' };
+const listaGestao = { marginTop: '25px' };
+const divisor = { margin: '20px 0', border: '0.5px solid #eee' };
+const gridMembros = { display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '15px' };
+const headerPost = { display: 'flex', gap: '12px', alignItems: 'center' };
+const nomeAutor = { color: '#1a1a1a', fontWeight: '700' };
+const dataPost = { color: '#bbb', fontSize: '12px', display: 'block' };
+const linkPost = { textDecoration: 'none', color: 'inherit' };
+const corpoPost = { marginTop: '15px', color: '#333', lineHeight: '1.6' };
+const sSubTitle = { fontSize: '14px', color: '#999', textTransform: 'uppercase', letterSpacing: '1px' };
+const msgAviso = { padding: '100px', textAlign: 'center' };
 
 export default PaginaComunidade;
