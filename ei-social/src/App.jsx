@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
-import { auth } from './firebase-config'
+import { auth, db } from './firebase-config' // Importe o 'db' também
 import { onAuthStateChanged, signOut } from 'firebase/auth'
+import { doc, onSnapshot } from 'firebase/firestore' // Importe o onSnapshot para tempo real
 import Login from './Login'
 import Cadastro from './Cadastro'
 import Feed from './Feed'
@@ -37,11 +38,30 @@ function App() {
   const [carregando, setCarregando] = useState(true)
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      setUsuario(user)
-      setCarregando(false)
-    })
-    return unsub
+    // 1. Escuta o estado de Login (Auth)
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        // 2. Se logado, escuta os dados do Perfil no Firestore (Foto, Nome, etc)
+        const docRef = doc(db, "usuarios", user.uid);
+        const unsubDoc = onSnapshot(docRef, (docSnap) => {
+          if (docSnap.exists()) {
+            // Combina os dados do Auth com os dados do Banco de Dados
+            setUsuario({ ...user, ...docSnap.data() });
+          } else {
+            setUsuario(user);
+          }
+          setCarregando(false);
+        });
+        
+        // Limpa o ouvinte do documento se deslogar
+        return () => unsubDoc();
+      } else {
+        setUsuario(null);
+        setCarregando(false);
+      }
+    });
+
+    return () => unsubAuth();
   }, [])
 
   async function sair() {
@@ -91,9 +111,7 @@ function App() {
           </RotaPrivada>
         } />
 
-        {/* --- ROTAS DINÂMICAS CORRIGIDAS (PLURAL) --- */}
-        
-        {/* Agora bate com o navigate("/comunidades/ID") */}
+        {/* --- ROTAS DE COMUNIDADE --- */}
         <Route path="/comunidades/:id" element={
           <RotaPrivada usuario={usuario} carregando={carregando}>
             <Layout usuario={usuario} onSair={sair}>
@@ -102,7 +120,6 @@ function App() {
           </RotaPrivada>
         } />
 
-        {/* Gerenciamento também no plural para manter o padrão */}
         <Route path="/comunidades/:id/gerenciar" element={
           <RotaPrivada usuario={usuario} carregando={carregando}>
             <Layout usuario={usuario} onSair={sair}>
