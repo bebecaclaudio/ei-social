@@ -2,213 +2,168 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { db } from './firebase-config';
 import { 
-  collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp 
+  collection, query, where, orderBy, onSnapshot, addDoc, serverTimestamp, doc, getDoc 
 } from 'firebase/firestore';
 
-// Importando o componente de post individual
+// IMPORTANTE: Use o componente AvatarAutor que já corrigimos antes
+function AvatarAutor({ uid, fallbackEmoji, tamanho = '45px' }) {
+  const [fotoUrl, setFotoUrl] = useState(null);
+  useEffect(() => {
+    if (!uid) return;
+    const carregarFoto = async () => {
+      const userDoc = await getDoc(doc(db, "usuarios", uid));
+      if (userDoc.exists()) setFotoUrl(userDoc.data().foto);
+    };
+    carregarFoto();
+  }, [uid]);
+
+  const imagemParaExibir = fotoUrl || (typeof fallbackEmoji === 'string' && fallbackEmoji.startsWith('http') ? fallbackEmoji : null);
+
+  return (
+    <div style={{ 
+      width: tamanho, height: tamanho, borderRadius: '50%', 
+      overflow: 'hidden', background: '#eee', display: 'flex', 
+      alignItems: 'center', justifyContent: 'center', border: '1px solid #ddd'
+    }}>
+      {imagemParaExibir ? (
+        <img src={imagemParaExibir} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      ) : (
+        <span style={{ fontSize: parseInt(tamanho) * 0.6 + 'px' }}>{fallbackEmoji || '👤'}</span>
+      )}
+    </div>
+  );
+}
+
 import CardPostComunidade from './CardPostComunidade';
 
 function PaginaComunidade({ usuario }) {
-  const { id } = useParams(); // Pega o slug da URL (ex: monarquistas-brasileiros)
+  const { id } = useParams();
   const navigate = useNavigate();
-  
   const [comu, setComu] = useState(null);
   const [posts, setPosts] = useState([]);
   const [novoPost, setNovoPost] = useState('');
-  const [enviando, setEnviando] = useState(false);
-  const [larguraJanela, setLarguraJanela] = useState(window.innerWidth);
+  const [largura, setLargura] = useState(window.innerWidth);
 
-  // 1. Lógica Responsiva (Detecta redimensionamento)
   useEffect(() => {
-    const handleResize = () => setLarguraJanela(window.innerWidth);
+    const handleResize = () => setLargura(window.innerWidth);
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const isMobile = larguraJanela <= 992; // Define o layout compacto para tablet/mobile
+  const isMobile = largura <= 992;
 
-  // 2. Busca dados da Comunidade no Firebase (Baseado no slug da URL)
   useEffect(() => {
-    const qComu = query(collection(db, "comunidades"), where("slug", "==", id));
-    const unsubComu = onSnapshot(qComu, (snapshot) => {
-      if (!snapshot.empty) {
-        setComu({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() });
-      }
+    const q = query(collection(db, "comunidades"), where("slug", "==", id));
+    return onSnapshot(q, (snap) => {
+      if (!snap.empty) setComu({ id: snap.docs[0].id, ...snap.docs[0].data() });
     });
-    return () => unsubComu();
   }, [id]);
 
-  // 3. Busca os posts desta comunidade em tempo real
   useEffect(() => {
     if (!comu?.id) return;
-    const qPosts = query(
-      collection(db, "posts_comunidades"), 
-      where("comunidadeId", "==", comu.id), 
-      orderBy("data", "desc")
-    );
-    const unsubPosts = onSnapshot(qPosts, (snap) => {
+    const q = query(collection(db, "posts_comunidades"), where("comunidadeId", "==", comu.id), orderBy("data", "desc"));
+    return onSnapshot(q, (snap) => {
       setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
-    return () => unsubPosts();
   }, [comu?.id]);
 
-  // 4. Função para criar um novo post
   async function enviarPost() {
-    if (!novoPost.trim() || !comu?.id || !usuario?.uid) return;
-    setEnviando(true);
-    try {
-      await addDoc(collection(db, "posts_comunidades"), {
-        comunidadeId: comu.id,
-        comunidadeSlug: comu.slug,
-        comunidadeNome: comu.nome,
-        autorUid: usuario.uid,
-        autorNome: usuario.displayName || "Membro",
-        autorFoto: usuario.photoURL || "",
-        texto: novoPost,
-        data: serverTimestamp(),
-        curtidas: [],
-        visualizacoes: 0,
-        comentariosCount: 0
-      });
-      setNovoPost('');
-    } catch (err) {
-      console.error("Erro ao postar:", err);
-    } finally {
-      setEnviando(false);
-    }
+    if (!novoPost.trim() || !usuario) return;
+    await addDoc(collection(db, "posts_comunidades"), {
+      comunidadeId: comu.id, texto: novoPost, autorUid: usuario.uid,
+      autorNome: usuario.displayName, data: serverTimestamp(),
+      curtidas: [], visualizacoes: 0
+    });
+    setNovoPost('');
   }
 
-  if (!comu) return <div style={msgCarregando}>Conectando à Pleiadians...</div>;
+  if (!comu) return <div style={{textAlign:'center', padding:'50px'}}>Carregando...</div>;
 
   return (
-    <div style={bgPagina}>
-      {/* BANNER DINÂMICO (Usa a capaUrl ou a cor salva no banco) */}
-      <div style={bannerStyle(comu.capaUrl || '#002776')}>
-        <div style={avatarCapaWrapper}>
-          {comu.emoji || '✨'}
-        </div>
+    <div style={{ background: '#f0f2f5', minHeight: '100vh' }}>
+      {/* BANNER COM AVATAR FLUTUANTE CORRIGIDO */}
+      <div style={{ height: '260px', background: comu.capaUrl || '#002776', position: 'relative' }}>
+        <div style={avatarFlutuante}>{comu.emoji || '👑'}</div>
       </div>
 
       <div style={isMobile ? layoutMobile : layoutDesktop}>
         
-        {/* COLUNA ESQUERDA: INFORMAÇÕES (Esconde no mobile compacto) */}
+        {/* COLUNA ESQUERDA - INFO */}
         {!isMobile && (
-          <aside style={{ flex: 1 }}>
-            <div style={cardInfo}>
-              <h2 style={tituloComu}>{comu.nome}</h2>
-              <span style={badgeCategoria}>{comu.categoria || 'Geral'}</span>
-              <p style={textoDescritivo}>{comu.descricao}</p>
-              
-              {comu.criadoPor === usuario?.uid && (
-                <button 
-                  onClick={() => navigate(`/comunidades/${id}/gerenciar`)} 
-                  style={btnAmarelo}
-                >
-                  ⚙️ Gerenciar Comunidade
-                </button>
-              )}
+          <aside style={{ flex: '0 0 300px' }}>
+            <div style={cardLateral}>
+              <h2 style={{fontWeight:'900', fontSize:'22px'}}>{comu.nome}</h2>
+              <span style={badge}>{comu.categoria}</span>
+              <p style={{color:'#666', margin:'15px 0'}}>Bem-vindos à {comu.nome}!</p>
+              <button onClick={() => navigate(`/comunidades/${id}/gerenciar`)} style={btnAmarelo}>
+                ⚙️ Gerenciar Comunidade
+              </button>
             </div>
           </aside>
         )}
 
-        {/* COLUNA CENTRAL: FEED DE POSTS */}
-        <main style={{ flex: isMobile ? '1 1 100%' : 2 }}>
-          
-          {/* Título aparece aqui apenas no Mobile Compacto */}
-          {isMobile && (
-            <div style={{ marginBottom: '15px', padding: '0 5px' }}>
-              <h2 style={{ margin: 0, fontWeight: '900' }}>{comu.nome}</h2>
-              <small style={{ color: '#666' }}>{comu.categoria}</small>
-            </div>
-          )}
-
-          {/* CAIXA DE POSTAGEM */}
+        {/* COLUNA CENTRAL - FEED */}
+        <main style={{ flex: 1, maxWidth: isMobile ? '100%' : '600px' }}>
           <div style={cardInput}>
             <div style={{ display: 'flex', gap: '12px' }}>
-              <img src={usuario?.photoURL} style={avatarMini} alt="" />
+              {/* USANDO O AVATARAUTOR PARA MINHA FOTO NO INPUT */}
+              <AvatarAutor uid={usuario?.uid} tamanho="45px" />
               <textarea 
-                placeholder={`O que há de novo na ${comu.nome}?`}
-                value={novoPost} 
-                onChange={(e) => setNovoPost(e.target.value)} 
-                style={inputTextArea}
+                placeholder={`No que você está pensando, ${usuario?.displayName?.split(' ')[0]}?`}
+                value={novoPost}
+                onChange={(e) => setNovoPost(e.target.value)}
+                style={textareaEstilo}
               />
             </div>
             <div style={{ textAlign: 'right', marginTop: '10px' }}>
-              <button 
-                onClick={enviarPost} 
-                disabled={enviando || !novoPost.trim()} 
-                style={btnPostarVerde}
-              >
-                {enviando ? '...' : 'Postar'}
-              </button>
+              <button onClick={enviarPost} style={btnPublicar}>Postar</button>
             </div>
           </div>
 
-          {/* LISTA DE POSTS (Mapeando o componente individual) */}
-          {posts.map((p) => (
-            <CardPostComunidade 
-              key={p.id} 
-              p={p} 
-              usuario={usuario} 
-              nomeComu={comu.nome} 
-              slugComu={comu.slug} 
-            />
+          {posts.map(p => (
+            <CardPostComunidade key={p.id} p={p} usuario={usuario} nomeComu={comu.nome} slugComu={comu.slug} />
           ))}
         </main>
 
-        {/* COLUNA DIREITA: MEMBROS (Esconde no mobile compacto) */}
+        {/* COLUNA DIREITA - MEMBROS (PREPARADA PARA O BOTÃO) */}
         {!isMobile && (
-          <aside style={{ flex: 1 }}>
-            <div style={cardInfo}>
-              <h4 style={tituloMembros}>Membros</h4>
-              <div style={listaMembros}>
-                <img src={usuario?.photoURL} style={avatarMembro} title="Você" alt="" />
+          <aside style={{ flex: '0 0 280px' }}>
+            <div style={cardLateral}>
+              <h4 style={{color:'#888', marginBottom:'15px'}}>Membros</h4>
+              <div style={gridMembros}>
+                {/* Aqui entrará o seu map de 6 ou 9 bolinhas */}
+                <AvatarAutor uid={usuario?.uid} tamanho="40px" />
               </div>
+              <button style={btnVerMaisMembros}>Ver todos os membros</button>
             </div>
           </aside>
         )}
-
       </div>
     </div>
   );
 }
 
-// --- ESTILOS (SISTEMA DE DESIGN PLEIADIANS) ---
-const bgPagina = { backgroundColor: '#f0f2f5', minHeight: '100vh', paddingBottom: '80px' };
-
-const bannerStyle = (bg) => ({ 
-  height: '260px', 
-  background: bg.startsWith('http') ? `url(${bg}) center/cover` : bg, 
-  position: 'relative',
-  borderRadius: '0 0 20px 20px'
-});
-
-const avatarCapaWrapper = { 
-  width: '100px', height: '100px', background: 'white', borderRadius: '25px', 
-  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '50px', 
-  position: 'absolute', bottom: '-50px', left: '8%', 
-  boxShadow: '0 4px 15px rgba(0,0,0,0.1)' 
+// --- ESTILOS RESGATADOS E PROPORCIONAIS ---
+const avatarFlutuante = {
+  width: '110px', height: '110px', background: 'white', borderRadius: '28px',
+  position: 'absolute', bottom: '-55px', left: '10%',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  fontSize: '55px', boxShadow: '0 8px 20px rgba(0,0,0,0.15)', zIndex: 10
 };
 
-const layoutDesktop = { display: 'flex', maxWidth: '1250px', margin: '70px auto 0', gap: '20px', padding: '0 20px' };
-const layoutMobile = { display: 'flex', flexDirection: 'column', padding: '70px 15px 0', gap: '15px' };
+const layoutDesktop = { display: 'flex', justifyContent: 'center', margin: '80px auto 0', gap: '25px', padding: '0 20px', maxWidth: '1280px' };
+const layoutMobile = { display: 'flex', flexDirection: 'column', padding: '75px 15px', gap: '20px' };
 
-const cardInfo = { background: 'white', padding: '25px', borderRadius: '25px', border: '1px solid #f0f0f0', textAlign: 'center' };
-const tituloComu = { fontSize: '24px', fontWeight: '900', color: '#0f1419', marginBottom: '8px' };
-const badgeCategoria = { background: '#eef2ff', color: '#5865f2', padding: '4px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 'bold' };
-const textoDescritivo = { color: '#536471', marginTop: '15px', fontSize: '14px', lineHeight: '1.6' };
+const cardLateral = { background: 'white', padding: '25px', borderRadius: '25px', textAlign: 'center', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' };
+const badge = { background: '#eef2ff', color: '#5865f2', padding: '5px 15px', borderRadius: '20px', fontWeight: 'bold', fontSize: '12px' };
 
-const btnAmarelo = { width: '100%', marginTop: '20px', padding: '12px', borderRadius: '12px', background: '#FFD700', border: 'none', fontWeight: '900', cursor: 'pointer' };
-const btnPostarVerde = { background: '#00a859', color: 'white', border: 'none', padding: '10px 25px', borderRadius: '15px', fontWeight: 'bold', cursor: 'pointer' };
+const cardInput = { background: 'white', padding: '20px', borderRadius: '20px', marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' };
+const textareaEstilo = { width: '100%', border: 'none', outline: 'none', fontSize: '16px', resize: 'none', minHeight: '60px', color: '#1a1a1a' };
 
-const cardInput = { background: 'white', padding: '20px', borderRadius: '20px', marginBottom: '15px', border: '1px solid #f0f0f0' };
-const inputTextArea = { width: '100%', border: 'none', outline: 'none', fontSize: '17px', resize: 'none', minHeight: '50px' };
-const avatarMini = { width: '45px', height: '45px', borderRadius: '50%' };
+const btnPublicar = { background: '#00a859', color: 'white', border: 'none', padding: '10px 30px', borderRadius: '15px', fontWeight: 'bold', cursor: 'pointer' };
+const btnAmarelo = { width: '100%', padding: '12px', background: '#FFD700', border: 'none', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' };
 
-const tituloMembros = { color: '#888', fontWeight: 'bold', fontSize: '14px', marginBottom: '15px' };
-const listaMembros = { display: 'flex', gap: '8px', justifyContent: 'center' };
-const avatarMembro = { width: '35px', height: '35px', borderRadius: '50%', border: '2px solid #00a859' };
-
-const msgCarregando = { textAlign: 'center', padding: '100px', fontWeight: '900', color: '#002776', fontSize: '20px' };
+const gridMembros = { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '15px' };
+const btnVerMaisMembros = { background: 'none', border: 'none', color: '#002776', fontWeight: 'bold', cursor: 'pointer', fontSize: '13px' };
 
 export default PaginaComunidade;
