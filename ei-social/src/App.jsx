@@ -85,10 +85,12 @@ function App() {
           </RotaPrivada>
         } />
 
+        {/* --- ROTA CORRIGIDA ABAIXO --- */}
         <Route path="/comunidades" element={
           <RotaPrivada usuario={usuario} carregando={carregando}>
             <Layout usuario={usuario} onSair={sair}>
-              <Comunidades />
+              {/* Agora passamos o objeto usuario para as Comunidades poderem usar o UID */}
+              <Comunidades usuario={usuario} /> 
             </Layout>
           </RotaPrivada>
         } />
