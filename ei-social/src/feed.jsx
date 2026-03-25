@@ -186,7 +186,16 @@ function Feed({ usuario }) {
                   </div>
                 </div>
               ) : (
-                <p style={{ fontSize: '16px', color: '#333', whiteSpace: 'pre-wrap', textAlign: 'left' }}>{post.texto}</p>
+                <p style={{ 
+                    fontSize: '16px', 
+                    color: '#333', 
+                    whiteSpace: 'pre-wrap', 
+                    textAlign: 'left',
+                    overflowWrap: 'anywhere', // <--- CORREÇÃO AQUI
+                    wordBreak: 'break-word'    // <--- CORREÇÃO AQUI
+                }}>
+                  {post.texto}
+                </p>
               )}
               
               <div style={barraAcoes}>
