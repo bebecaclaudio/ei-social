@@ -50,7 +50,7 @@ function Feed({ usuario }) {
   const [editandoId, setEditandoId] = useState(null)
   const [textoEditado, setTextoEditado] = useState('')
   const [minhaFotoAtual, setMinhaFotoAtual] = useState('')
-  const [notificacao, setNotificacao] = useState(null) // Para o "Ei!" bonitinho
+  const [notificacao, setNotificacao] = useState(null)
 
   useEffect(() => {
     if (!usuario?.uid) return
@@ -69,7 +69,7 @@ function Feed({ usuario }) {
   }, [])
 
   async function publicar() {
-    if (novoPost.trim() === '') return
+    if (novoPost.trim() === '' || novoPost.length > 160) return
     try {
       await addDoc(collection(db, "posts"), {
         autorUid: usuario?.uid,
@@ -99,19 +99,13 @@ function Feed({ usuario }) {
   function mandarEi(postId, nomeUsuario) {
     if (eiEnviados.includes(postId)) return 
     setEiEnviados([...eiEnviados, postId])
-    
-    // Notificação interna bonitinha
     setNotificacao(`Você mandou um "Ei!" para ${nomeUsuario} 👋`);
     setTimeout(() => setNotificacao(null), 3000);
   }
 
   return (
     <div style={{ minHeight: '100vh', background: '#f0f2f5', paddingBottom: '80px' }}>
-      
-      {/* TOAST DE NOTIFICAÇÃO DO EI */}
-      {notificacao && (
-        <div style={toastStyle}>{notificacao}</div>
-      )}
+      {notificacao && <div style={toastStyle}>{notificacao}</div>}
 
       {postParaExcluir && (
         <div style={overlayStyle}>
@@ -129,8 +123,6 @@ function Feed({ usuario }) {
       )}
 
       <div style={{ maxWidth: '600px', margin: '0 auto', padding: '24px 16px' }}>
-        
-        {/* ÁREA DE POSTAR */}
         <div style={cardEstilo}>
           <div style={{ display: 'flex', gap: '12px' }}>
             <div style={{ width: '45px', height: '45px', borderRadius: '50%', overflow: 'hidden', background: '#eee' }}>
@@ -144,18 +136,21 @@ function Feed({ usuario }) {
               onChange={(e) => setNovoPost(e.target.value)}
               onFocus={() => setFocado(true)}
               onBlur={() => setFocado(false)}
+              maxLength={160}
               style={{
                 ...textareaEstilo, 
                 border: focado ? '2px solid #009c3b' : '1px solid #ddd'
               }}
             />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'end', marginTop: '12px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
+            <span style={{ fontSize: '12px', color: novoPost.length >= 160 ? '#e00' : '#888', marginLeft: '57px' }}>
+              {novoPost.length}/160
+            </span>
             <button onClick={publicar} style={btnPublicar(novoPost.trim() === '')}>Publicar</button>
           </div>
         </div>
 
-        {/* LISTA DE POSTS */}
         {posts.map((post) => {
           const souEu = post.autorUid === usuario?.uid
           const postCurtidoPorMim = post.curtidores?.includes(usuario?.uid)
@@ -164,7 +159,6 @@ function Feed({ usuario }) {
 
           return (
             <div key={post.id} style={{...cardEstilo, position: 'relative' }}>
-              
               {souEu && !isEditando && (
                 <div style={{ position: 'absolute', top: '20px', right: '20px', display: 'flex', gap: '12px' }}>
                   <span onClick={() => { setEditandoId(post.id); setTextoEditado(post.texto); }} style={iconBtn}>✏️</span>
@@ -182,11 +176,7 @@ function Feed({ usuario }) {
 
               {isEditando ? (
                 <div>
-                  <textarea 
-                    value={textoEditado} 
-                    onChange={(e) => setTextoEditado(e.target.value)} 
-                    style={textareaEstilo} 
-                  />
+                  <textarea value={textoEditado} maxLength={160} onChange={(e) => setTextoEditado(e.target.value)} style={textareaEstilo} />
                   <div style={{ display: 'flex', gap: '8px', marginTop: '8px', justifyContent: 'end' }}>
                     <button onClick={() => setEditandoId(null)} style={btnCancel}>Cancelar</button>
                     <button onClick={() => {
@@ -200,24 +190,12 @@ function Feed({ usuario }) {
               )}
               
               <div style={barraAcoes}>
-                {/* BOTÃO DE CURTIR COM FUNDO ROSA */}
-                <button 
-                    onClick={() => curtir(post)} 
-                    style={{
-                        ...btnAcao, 
-                        background: postCurtidoPorMim ? '#fff0f5' : 'transparent',
-                        borderRadius: '20px',
-                        border: postCurtidoPorMim ? '1px solid #ffb6c1' : 'none',
-                        transition: 'all 0.3s ease'
-                    }}
-                >
+                <button onClick={() => curtir(post)} style={{...btnAcao, background: postCurtidoPorMim ? '#fff0f5' : 'transparent', borderRadius: '20px', border: postCurtidoPorMim ? '1px solid #ffb6c1' : 'none', transition: 'all 0.3s ease'}}>
                   <span style={{ color: postCurtidoPorMim ? '#e00' : '#555' }}>
                     {postCurtidoPorMim ? '❤️' : '🤍'} {post.curtidas || 0}
                   </span>
                 </button>
-
                 <button style={btnAcao}>💬 Comentar</button>
-
                 {!souEu && (
                   <button onClick={() => mandarEi(post.id, post.usuario)} style={{...btnAcao, color: eiJaEnviado ? '#ffaa00' : '#555'}}>
                     {eiJaEnviado ? '👋 Ei enviado!' : '👋 Ei!'}
@@ -232,14 +210,7 @@ function Feed({ usuario }) {
   )
 }
 
-// --- ESTILOS EXTRAS ---
-const toastStyle = {
-    position: 'fixed', bottom: '100px', left: '50%', transform: 'translateX(-50%)',
-    background: '#002776', color: 'white', padding: '12px 24px', borderRadius: '30px',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.2)', zIndex: 11000, fontWeight: 'bold',
-    animation: 'fadeUp 0.5s ease'
-};
-
+const toastStyle = { position: 'fixed', bottom: '100px', left: '50%', transform: 'translateX(-50%)', background: '#002776', color: 'white', padding: '12px 24px', borderRadius: '30px', boxShadow: '0 4px 12px rgba(0,0,0,0.2)', zIndex: 11000, fontWeight: 'bold' };
 const overlayStyle = { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, backdropFilter: 'blur(4px)' };
 const modalStyle = { background: 'white', padding: '30px', borderRadius: '20px', textAlign: 'center', width: '90%', maxWidth: '320px' };
 const btnDeleteConfirm = { background: '#ff3b30', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' };
