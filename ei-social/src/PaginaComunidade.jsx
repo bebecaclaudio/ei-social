@@ -68,7 +68,6 @@ function PaginaComunidade({ usuario }) {
   return (
     <div style={{ background: '#f0f2f5', minHeight: '100vh', paddingBottom: '30px' }}>
       
-      {/* BANNER COM RESPIRO E AVATAR DINÂMICO */}
       <div style={containerBannerGeral}>
         <div style={estiloBanner(comu.capaUrl || '#002663')}>
           <div style={avatarTopoEsquerdo}>{comu.emoji || '✨'}</div>
@@ -81,8 +80,9 @@ function PaginaComunidade({ usuario }) {
           <div style={cardBranco}>
             <h1 style={tituloPretoSidebar}>{comu.nome}</h1>
             <span style={badgeCategoriaAzulClaro}>{comu.categoria}</span>
-            <div style={divisor} />
-            <p style={textoDesc}>{comu.descricao}</p>
+            {/* LINHA REMOVIDA E TEXTO APROXIMADO */}
+            <p style={textoDescAproximado}>{comu.descricao || "Bem-vinda à nossa egrégora."}</p>
+            
             {souDono && (
               <button onClick={() => navigate(`/comunidades/${id}/gerenciar`)} style={btnGerenciarAmarelo}>
                 ⚙️ Gerenciar Informações
@@ -147,15 +147,15 @@ const colCentro = (mob) => ({ flex: 1, maxWidth: mob ? '100%' : '520px' });
 const fullWidth = { width: '100%' };
 const cardBranco = { background: 'white', padding: '20px', borderRadius: '20px', border: '1px solid #e1e8ed' };
 
-// Tipografia e Cores
 const tituloPretoSidebar = { fontSize: '22px', fontWeight: '900', color: '#000', margin: '0 0 10px', lineHeight: '1.2' };
 const tituloPretoMembros = { fontSize: '18px', fontWeight: '900', color: '#000', margin: '0' };
-const badgeCategoriaAzulClaro = { background: '#e0f7fa', color: '#002663', fontSize: '12px', fontWeight: 'bold', padding: '5px 12px', borderRadius: '15px', display: 'inline-block', marginBottom: '12px' };
-const divisor = { height: '1px', background: '#f0f2f5', margin: '15px 0' };
-const divisorPequeno = { height: '1px', background: '#f0f2f5', margin: '10px 0' };
-const textoDesc = { fontSize: '14px', color: '#555', marginTop: '10px', lineHeight: '1.4' };
+const badgeCategoriaAzulClaro = { background: '#e0f7fa', color: '#002663', fontSize: '12px', fontWeight: 'bold', padding: '5px 12px', borderRadius: '15px', display: 'inline-block', marginBottom: '8px' };
 
-// Inputs e Botões
+const divisorPequeno = { height: '1px', background: '#f0f2f5', margin: '10px 0' };
+
+// Estilo de descrição aproximado (sem o divisor e com margem menor)
+const textoDescAproximado = { fontSize: '14px', color: '#555', marginTop: '5px', lineHeight: '1.4' };
+
 const cardPostar = { background: 'white', padding: '18px', borderRadius: '22px', border: '1px solid #e1e8ed', marginBottom: '20px' };
 const inputAreaAjustado = { width: '100%', boxSizing: 'border-box', border: 'none', background: '#f8f9fa', borderRadius: '12px', minHeight: '90px', padding: '15px', outline: 'none', resize: 'none', fontSize: '16px', color: '#1a1a1a' };
 const botoesAcaoPost = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px' };
