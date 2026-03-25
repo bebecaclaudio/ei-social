@@ -60,18 +60,18 @@ function Comunidades({ usuario }) {
         categoria: novaComunidade.categoria || 'Geral',
         emoji: novaComunidade.emoji || '👥',
         membrosCount: 1,
-        membros: [usuario.uid], // <--- Já inicia com você no array
+        membros: [usuario.uid], 
         criadoPor: usuario.uid,
         dataCriacao: new Date()
       })
 
+      // Usamos updateDoc aqui para garantir que não sobrescreva outros dados do usuário
       await updateDoc(doc(db, 'usuarios', usuario.uid), {
         comunidadesInscritas: arrayUnion(docRef.id)
       })
 
       setNovaComunidade({ nome: '', categoria: '', emoji: '' })
       setCriando(false)
-      
       navigate(`/comunidades/${slugBonito}`)
     } catch (e) { 
       console.error("Erro ao salvar:", e)
@@ -85,12 +85,10 @@ function Comunidades({ usuario }) {
     const comRef = doc(db, 'comunidades', id)
 
     try {
-      // Atualiza o Usuário
       await updateDoc(userRef, {
         comunidadesInscritas: jaParticipa ? arrayRemove(id) : arrayUnion(id)
       })
 
-      // Atualiza a Comunidade usando o array "membros"
       await updateDoc(comRef, {
         membros: jaParticipa ? arrayRemove(usuario.uid) : arrayUnion(usuario.uid),
         membrosCount: increment(jaParticipa ? -1 : 1)
@@ -139,8 +137,10 @@ function Comunidades({ usuario }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '15px' }}>
         {filtradas.map(c => {
-          // A mágica acontece aqui: checa se seu UID está no array membros da comunidade
-          const participando = c.membros?.includes(usuario?.uid);
+          // AQUI ESTÁ O AJUSTE: Checamos no array do usuário E no array da comunidade
+          // Isso resolve o bug caso um dos dois campos esteja desatualizado no banco
+          const participando = minhasComunidades.includes(c.id) || (c.membros && c.membros.includes(usuario?.uid));
+          
           const urlDestino = c.slug || c.id;
 
           return (
