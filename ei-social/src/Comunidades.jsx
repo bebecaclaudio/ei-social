@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { db } from './firebase-config'
 import {
   collection, addDoc, onSnapshot, doc, 
-  query, orderBy, setDoc, increment, arrayUnion, arrayRemove
+  query, orderBy, setDoc, updateDoc, increment, arrayUnion, arrayRemove
 } from 'firebase/firestore'
 
 function Comunidades({ usuario }) {
@@ -14,14 +14,13 @@ function Comunidades({ usuario }) {
   const [busca, setBusca] = useState('')
   const [novaComunidade, setNovaComunidade] = useState({ nome: '', categoria: '', emoji: '' })
 
-  // --- FUNÇÃO AUXILIAR: Transforma "Nome da Comu" em "nome-da-comu" ---
   const gerarSlug = (texto) => {
     return texto
       .toLowerCase()
       .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "") // Remove acentos
-      .replace(/[^\w ]+/g, '')        // Remove símbolos especiais
-      .replace(/ +/g, '-')           // Troca espaços por traços
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^\w ]+/g, '')        
+      .replace(/ +/g, '-')           
       .trim();
   };
 
@@ -52,28 +51,27 @@ function Comunidades({ usuario }) {
       return
     }
 
-    // Criamos o slug antes de salvar
     const slugBonito = gerarSlug(novaComunidade.nome);
 
     try {
       const docRef = await addDoc(collection(db, 'comunidades'), {
         nome: novaComunidade.nome,
-        slug: slugBonito, // <--- SALVANDO O SLUG NO FIREBASE
+        slug: slugBonito,
         categoria: novaComunidade.categoria || 'Geral',
         emoji: novaComunidade.emoji || '👥',
         membrosCount: 1,
+        membros: [usuario.uid], // <--- Já inicia com você no array
         criadoPor: usuario.uid,
         dataCriacao: new Date()
       })
 
-      await setDoc(doc(db, 'usuarios', usuario.uid), {
+      await updateDoc(doc(db, 'usuarios', usuario.uid), {
         comunidadesInscritas: arrayUnion(docRef.id)
-      }, { merge: true })
+      })
 
       setNovaComunidade({ nome: '', categoria: '', emoji: '' })
       setCriando(false)
       
-      // Agora navegamos para a URL bonitinha
       navigate(`/comunidades/${slugBonito}`)
     } catch (e) { 
       console.error("Erro ao salvar:", e)
@@ -87,13 +85,16 @@ function Comunidades({ usuario }) {
     const comRef = doc(db, 'comunidades', id)
 
     try {
-      await setDoc(userRef, {
+      // Atualiza o Usuário
+      await updateDoc(userRef, {
         comunidadesInscritas: jaParticipa ? arrayRemove(id) : arrayUnion(id)
-      }, { merge: true })
+      })
 
-      await setDoc(comRef, {
+      // Atualiza a Comunidade usando o array "membros"
+      await updateDoc(comRef, {
+        membros: jaParticipa ? arrayRemove(usuario.uid) : arrayUnion(usuario.uid),
         membrosCount: increment(jaParticipa ? -1 : 1)
-      }, { merge: true })
+      })
     } catch (e) { 
       console.error("Erro:", e) 
     }
@@ -138,8 +139,8 @@ function Comunidades({ usuario }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '15px' }}>
         {filtradas.map(c => {
-          const participando = minhasComunidades.includes(c.id)
-          // Se a comunidade já tem o campo slug, usamos ele. Se for antiga, usamos o id.
+          // A mágica acontece aqui: checa se seu UID está no array membros da comunidade
+          const participando = c.membros?.includes(usuario?.uid);
           const urlDestino = c.slug || c.id;
 
           return (
@@ -177,4 +178,4 @@ function Comunidades({ usuario }) {
   )
 }
 
-export default Comunidades
+export default Comunidades;
