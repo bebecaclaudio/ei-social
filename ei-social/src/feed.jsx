@@ -191,15 +191,24 @@ function Feed({ usuario }) {
                     color: '#333', 
                     whiteSpace: 'pre-wrap', 
                     textAlign: 'left',
-                    overflowWrap: 'anywhere', // <--- CORREÇÃO AQUI
-                    wordBreak: 'break-word'    // <--- CORREÇÃO AQUI
+                    overflowWrap: 'anywhere',
+                    wordBreak: 'break-word'
                 }}>
                   {post.texto}
                 </p>
               )}
               
               <div style={barraAcoes}>
-                <button onClick={() => curtir(post)} style={{...btnAcao, background: postCurtidoPorMim ? '#fff0f5' : 'transparent', borderRadius: '20px', border: postCurtidoPorMim ? '1px solid #ffb6c1' : 'none', transition: 'all 0.3s ease'}}>
+                <button 
+                  onClick={() => curtir(post)} 
+                  style={{
+                    ...btnAcao, 
+                    background: postCurtidoPorMim ? '#fff0f5' : 'transparent', 
+                    borderRadius: '20px', 
+                    border: 'none', 
+                    transition: 'all 0.3s ease'
+                  }}
+                >
                   <span style={{ color: postCurtidoPorMim ? '#e00' : '#555' }}>
                     {postCurtidoPorMim ? '❤️' : '🤍'} {post.curtidas || 0}
                   </span>
