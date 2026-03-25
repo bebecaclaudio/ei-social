@@ -21,14 +21,15 @@ function AvatarRedondo({ uid, tamanho = '45px' }) {
 }
 
 function PaginaComunidade({ usuario }) {
-  // Mantive 'id' como você enviou, mas ele receberá o slug da URL
-  const { id } = useParams(); 
+  // Pegamos o slug da URL (que no App.js está como :slug)
+  const { slug } = useParams(); 
   const navigate = useNavigate();
   
   const [comu, setComu] = useState(null);
   const [posts, setPosts] = useState([]);
   const [novoPost, setNovoPost] = useState('');
   const [largura, setLargura] = useState(window.innerWidth);
+  const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
     const handleResize = () => setLargura(window.innerWidth);
@@ -38,24 +39,28 @@ function PaginaComunidade({ usuario }) {
 
   const isMobile = largura <= 992;
 
-  // 1. BUSCA DA COMUNIDADE (Lógica para buscar pelo campo 'slug')
+  // 1. BUSCA DA COMUNIDADE POR SLUG
   useEffect(() => {
-    // Buscamos onde o campo 'slug' no Firestore é igual ao 'id' da URL
-    const q = query(collection(db, "comunidades"), where("slug", "==", id));
+    if (!slug) return;
+    setCarregando(true);
+
+    const q = query(collection(db, "comunidades"), where("slug", "==", slug));
     const unsub = onSnapshot(q, async (snap) => {
       if (!snap.empty) {
         setComu({ id: snap.docs[0].id, ...snap.docs[0].data() });
+        setCarregando(false);
       } else {
-        // Fallback para IDs antigos caso não encontre por slug
-        const docRef = doc(db, "comunidades", id);
+        // Fallback para IDs antigos se não achar o slug
+        const docRef = doc(db, "comunidades", slug);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           setComu({ id: docSnap.id, ...docSnap.data() });
         }
+        setCarregando(false);
       }
     });
     return () => unsub();
-  }, [id]);
+  }, [slug]);
 
   // 2. BUSCA DOS POSTS
   useEffect(() => {
@@ -64,7 +69,7 @@ function PaginaComunidade({ usuario }) {
     const q = query(
       collection(db, "posts_comunidade"), 
       where("comunidadeId", "==", comu.id),
-      orderBy("data", "desc") // Reativei o orderby para os novos ficarem no topo
+      orderBy("data", "desc")
     );
 
     const unsub = onSnapshot(q, (snap) => {
@@ -96,7 +101,9 @@ function PaginaComunidade({ usuario }) {
     }
   }
 
-  if (!comu) return <div style={{padding: '20px', textAlign: 'center'}}>Carregando comunidade...</div>;
+  if (carregando) return <div style={{padding: '20px', textAlign: 'center', color: '#666'}}>Carregando comunidade...</div>;
+  if (!comu) return <div style={{padding: '20px', textAlign: 'center'}}>Comunidade não encontrada.</div>;
+
   const souDono = comu.criadoPor === usuario?.uid;
 
   return (
@@ -117,7 +124,7 @@ function PaginaComunidade({ usuario }) {
             <p style={textoDescAproximado}>{comu.descricao || "Bem-vinda à nossa egrégora."}</p>
             
             {souDono && (
-              <button onClick={() => navigate(`/comunidades/${id}/gerenciar`)} style={btnGerenciarAmarelo}>
+              <button onClick={() => navigate(`/comunidades/${slug}/gerenciar`)} style={btnGerenciarAmarelo}>
                 ⚙️ Gerenciar Informações
               </button>
             )}
@@ -152,7 +159,7 @@ function PaginaComunidade({ usuario }) {
           {posts.length === 0 ? (
             <p style={{textAlign: 'center', color: '#888', marginTop: '20px'}}>Nenhum post nesta comunidade ainda.</p>
           ) : (
-            posts.map(p => <CardPostComunidade key={p.id} p={p} usuario={usuario} slugComu={id} />)
+            posts.map(p => <CardPostComunidade key={p.id} p={p} usuario={usuario} slugComu={slug} />)
           )}
         </main>
 
@@ -174,7 +181,7 @@ function PaginaComunidade({ usuario }) {
   );
 }
 
-// --- ESTILOS ---
+// --- SEUS ESTILOS ORIGINAIS (SEM ALTERAÇÃO) ---
 const containerBannerGeral = { maxWidth: '1150px', margin: '0 auto', padding: '20px 20px 0', position: 'relative' };
 const estiloBanner = (bg) => ({ height: '220px', background: bg.startsWith('http') ? `url(${bg}) center/cover` : bg, borderRadius: '20px', position: 'relative' });
 const avatarTopoEsquerdo = { width: '100px', height: '100px', background: 'white', borderRadius: '25px', position: 'absolute', bottom: '-40px', left: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '50px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', border: '4px solid white', zIndex: 10 };

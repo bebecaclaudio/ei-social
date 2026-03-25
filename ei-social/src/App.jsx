@@ -42,7 +42,7 @@ function App() {
   const [carregando, setCarregando] = useState(true)
 
   useEffect(() => {
-    // Escuta o estado de autenticação
+    // Escuta o estado de autenticação do Firebase
     const unsubAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
         // Escuta os dados complementares do perfil no Firestore em tempo real
@@ -115,7 +115,8 @@ function App() {
           </RotaPrivada>
         } />
 
-        {/* ROTAS DINÂMICAS DE COMUNIDADE (USANDO SLUG) */}
+        {/* ROTAS DINÂMICAS DE COMUNIDADE (USANDO :slug) */}
+        {/* O :slug aqui é capturado pelo useParams() na PaginaComunidade */}
         <Route path="/comunidades/:slug" element={
           <RotaPrivada usuario={usuario} carregando={carregando}>
             <Layout usuario={usuario} onSair={sair}>
