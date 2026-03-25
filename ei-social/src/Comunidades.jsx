@@ -12,7 +12,26 @@ function Comunidades({ usuario }) {
   const [minhasComunidades, setMinhasComunidades] = useState([])
   const [criando, setCriando] = useState(false)
   const [busca, setBusca] = useState('')
-  const [novaComunidade, setNovaComunidade] = useState({ nome: '', descricao: '', categoria: '', emoji: '' })
+  
+  // Adicionado o campo 'slug' no estado inicial
+  const [novaComunidade, setNovaComunidade] = useState({ 
+    nome: '', 
+    slug: '', 
+    descricao: '', 
+    categoria: '', 
+    emoji: '' 
+  })
+
+  // FUNÇÃO AUXILIAR: Transforma "Minha Comunidade" em "minha-comunidade"
+  const formatarSlug = (texto) => {
+    return texto
+      .toLowerCase()
+      .trim()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, "") // Remove acentos
+      .replace(/\s+/g, '-') // Espaços viram hífens
+      .replace(/[^\w-]+/g, '') // Remove caracteres especiais
+      .replace(/--+/g, '-'); // Evita hífens duplos
+  }
 
   useEffect(() => {
     const q = query(collection(db, 'comunidades'), orderBy('dataCriacao', 'desc'))
@@ -41,18 +60,11 @@ function Comunidades({ usuario }) {
       return
     }
 
-    // GERA O SLUG LIMPO (remove espaços e caracteres especiais)
-    const slugGerado = novaComunidade.nome
-      .toLowerCase()
-      .trim()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, "") // Remove acentos
-      .replace(/\s+/g, '-') // Espaço vira hífen
-      .replace(/[^\w-]+/g, '') // Remove o que não for letra ou hífen
-
     try {
+      // Usamos o slug que já foi gerado no estado
       const docRef = await addDoc(collection(db, 'comunidades'), {
         nome: novaComunidade.nome,
-        slug: slugGerado,
+        slug: novaComunidade.slug,
         descricao: novaComunidade.descricao,
         categoria: novaComunidade.categoria || 'Geral',
         emoji: novaComunidade.emoji || '👥',
@@ -70,8 +82,12 @@ function Comunidades({ usuario }) {
         comunidadesInscritas: arrayUnion(docRef.id)
       }, { merge: true })
 
-      setNovaComunidade({ nome: '', descricao: '', categoria: '', emoji: '' })
+      // Redireciona direto para a nova comunidade usando o slug
+      const destino = novaComunidade.slug || docRef.id
+      setNovaComunidade({ nome: '', slug: '', descricao: '', categoria: '', emoji: '' })
       setCriando(false)
+      navigate(`/comunidades/${destino}`)
+
     } catch (e) { 
       console.error("Erro ao salvar:", e)
     }
@@ -122,7 +138,24 @@ function Comunidades({ usuario }) {
           <h3 style={{ marginTop: 0, color: '#002776' }}>Criar nova comunidade</h3>
           
           <label style={s.label}>Nome da Comunidade</label>
-          <input style={s.input} value={novaComunidade.nome} placeholder="Ex: Desenvolvedores SP" onChange={e => setNovaComunidade({...novaComunidade, nome: e.target.value})} />
+          <input 
+            style={s.input} 
+            value={novaComunidade.nome} 
+            placeholder="Ex: Desenvolvedores SP" 
+            onChange={e => {
+              const nome = e.target.value
+              setNovaComunidade({
+                ...novaComunidade, 
+                nome: nome,
+                slug: formatarSlug(nome) // Captura automática aqui!
+              })
+            }} 
+          />
+          
+          {/* Mostra o slug para o usuário saber qual será o link */}
+          <p style={{ fontSize: '11px', color: '#666', marginTop: '-5px', marginBottom: '10px' }}>
+            Link: ei-social.web.app/comunidades/<strong>{novaComunidade.slug}</strong>
+          </p>
 
           <label style={s.label}>Descrição</label>
           <textarea style={{ ...s.input, height: '80px', fontFamily: 'inherit' }} value={novaComunidade.descricao} placeholder="Fale sobre a comunidade..." onChange={e => setNovaComunidade({...novaComunidade, descricao: e.target.value})} />
@@ -150,7 +183,6 @@ function Comunidades({ usuario }) {
           return (
             <div key={c.id} style={{ background: 'white', padding: '20px', borderRadius: '15px', border: participando ? '2px solid #009c3b' : '1px solid #ddd', textAlign: 'center' }}>
               
-              {/* CORREÇÃO DO CLIQUE: Usa o slug se existir, senão usa o ID do documento */}
               <div 
                 onClick={() => navigate(`/comunidades/${c.slug || c.id}`)} 
                 style={{ cursor: 'pointer' }}
