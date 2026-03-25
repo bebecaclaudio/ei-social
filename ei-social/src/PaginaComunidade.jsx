@@ -21,7 +21,8 @@ function AvatarRedondo({ uid, tamanho = '45px' }) {
 }
 
 function PaginaComunidade({ usuario }) {
-  const { id } = useParams();
+  // Mantive 'id' como você enviou, mas ele receberá o slug da URL
+  const { id } = useParams(); 
   const navigate = useNavigate();
   
   const [comu, setComu] = useState(null);
@@ -37,30 +38,37 @@ function PaginaComunidade({ usuario }) {
 
   const isMobile = largura <= 992;
 
-  // 1. BUSCA DA COMUNIDADE (Certifique-se que o nome da coleção é 'comunidades')
+  // 1. BUSCA DA COMUNIDADE (Lógica para buscar pelo campo 'slug')
   useEffect(() => {
+    // Buscamos onde o campo 'slug' no Firestore é igual ao 'id' da URL
     const q = query(collection(db, "comunidades"), where("slug", "==", id));
-    const unsub = onSnapshot(q, (snap) => {
+    const unsub = onSnapshot(q, async (snap) => {
       if (!snap.empty) {
         setComu({ id: snap.docs[0].id, ...snap.docs[0].data() });
+      } else {
+        // Fallback para IDs antigos caso não encontre por slug
+        const docRef = doc(db, "comunidades", id);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          setComu({ id: docSnap.id, ...docSnap.data() });
+        }
       }
     });
     return () => unsub();
   }, [id]);
 
-  // 2. BUSCA DOS POSTS (Ajustado para 'posts_comunidade' que você confirmou)
+  // 2. BUSCA DOS POSTS
   useEffect(() => {
     if (!comu?.id) return;
     
-    // Removi o orderBy temporariamente para garantir que apareça mesmo se não tiver data
     const q = query(
       collection(db, "posts_comunidade"), 
-      where("comunidadeId", "==", comu.id)
+      where("comunidadeId", "==", comu.id),
+      orderBy("data", "desc") // Reativei o orderby para os novos ficarem no topo
     );
 
     const unsub = onSnapshot(q, (snap) => {
       const lista = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      console.log("Posts carregados da comunidade:", lista); // Para você ver no console
       setPosts(lista);
     }, (error) => {
        console.error("Erro ao carregar posts:", error);
@@ -69,7 +77,7 @@ function PaginaComunidade({ usuario }) {
     return () => unsub();
   }, [comu?.id]);
 
-  // 3. ENVIO DO POST (Ajustado para 'posts_comunidade')
+  // 3. ENVIO DO POST
   async function enviarPost() {
     if (!novoPost.trim() || novoPost.length > 5000 || !usuario || !comu) return;
     try {
@@ -166,7 +174,7 @@ function PaginaComunidade({ usuario }) {
   );
 }
 
-// --- ESTILOS (MANTIDOS EXATAMENTE COMO VOCÊ ENVIOU) ---
+// --- ESTILOS ---
 const containerBannerGeral = { maxWidth: '1150px', margin: '0 auto', padding: '20px 20px 0', position: 'relative' };
 const estiloBanner = (bg) => ({ height: '220px', background: bg.startsWith('http') ? `url(${bg}) center/cover` : bg, borderRadius: '20px', position: 'relative' });
 const avatarTopoEsquerdo = { width: '100px', height: '100px', background: 'white', borderRadius: '25px', position: 'absolute', bottom: '-40px', left: '30px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '50px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', border: '4px solid white', zIndex: 10 };

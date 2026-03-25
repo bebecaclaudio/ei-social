@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { db } from './firebase-config'
 import { useNavigate } from 'react-router-dom'
 import {
   collection, addDoc, onSnapshot, doc, 
-  query, orderBy, setDoc, increment, arrayUnion, arrayRemove, deleteDoc
+  query, orderBy, setDoc, increment, arrayUnion, arrayRemove, deleteDoc,
+  serverTimestamp
 } from 'firebase/firestore'
 
 function Comunidades({ usuario }) {
@@ -13,7 +14,6 @@ function Comunidades({ usuario }) {
   const [criando, setCriando] = useState(false)
   const [busca, setBusca] = useState('')
   
-  // Adicionado o campo 'slug' no estado inicial
   const [novaComunidade, setNovaComunidade] = useState({ 
     nome: '', 
     slug: '', 
@@ -33,6 +33,7 @@ function Comunidades({ usuario }) {
       .replace(/--+/g, '-'); // Evita hífens duplos
   }
 
+  // Busca lista geral de comunidades
   useEffect(() => {
     const q = query(collection(db, 'comunidades'), orderBy('dataCriacao', 'desc'))
     const unsub = onSnapshot(q, (snapshot) => {
@@ -41,6 +42,7 @@ function Comunidades({ usuario }) {
     return () => unsub()
   }, [])
 
+  // Busca comunidades que o usuário participa
   useEffect(() => {
     if (!usuario?.uid) return
     const userRef = doc(db, 'usuarios', usuario.uid)
@@ -55,41 +57,49 @@ function Comunidades({ usuario }) {
   }, [usuario])
 
   async function salvarComunidade() {
-    if (!novaComunidade.nome.trim() || !usuario?.uid) {
+    const nomeLimpo = novaComunidade.nome.trim();
+    if (!nomeLimpo || !usuario?.uid) {
       alert("Por favor, preencha o nome e verifique seu login.")
       return
     }
 
+    // Garante que temos um slug antes de enviar
+    const slugFinal = novaComunidade.slug || formatarSlug(nomeLimpo);
+
     try {
-      // Usamos o slug que já foi gerado no estado
+      // 1. Cria a comunidade
       const docRef = await addDoc(collection(db, 'comunidades'), {
-        nome: novaComunidade.nome,
-        slug: novaComunidade.slug,
+        nome: nomeLimpo,
+        slug: slugFinal,
         descricao: novaComunidade.descricao,
         categoria: novaComunidade.categoria || 'Geral',
         emoji: novaComunidade.emoji || '👥',
         membrosCount: 1,
         criadoPor: usuario.uid,
-        dataCriacao: new Date()
+        dataCriacao: serverTimestamp() 
       })
 
+      // 2. Adiciona o criador como primeiro membro na subcoleção
       await setDoc(doc(db, 'comunidades', docRef.id, 'membros', usuario.uid), {
         uid: usuario.uid,
-        desde: new Date()
+        desde: serverTimestamp()
       })
 
+      // 3. Adiciona a ID da comunidade no perfil do usuário
       await setDoc(doc(db, 'usuarios', usuario.uid), {
         comunidadesInscritas: arrayUnion(docRef.id)
       }, { merge: true })
 
-      // Redireciona direto para a nova comunidade usando o slug
-      const destino = novaComunidade.slug || docRef.id
+      // Reseta o estado e navega
       setNovaComunidade({ nome: '', slug: '', descricao: '', categoria: '', emoji: '' })
       setCriando(false)
-      navigate(`/comunidades/${destino}`)
+      
+      // Navega usando o slug para a URL ficar amigável
+      navigate(`/comunidades/${slugFinal}`)
 
     } catch (e) { 
       console.error("Erro ao salvar:", e)
+      alert("Houve um erro ao criar a comunidade.")
     }
   }
 
@@ -105,7 +115,7 @@ function Comunidades({ usuario }) {
         await setDoc(userRef, { comunidadesInscritas: arrayRemove(id) }, { merge: true })
         await setDoc(comRef, { membrosCount: increment(-1) }, { merge: true })
       } else {
-        await setDoc(membroRef, { uid: usuario.uid, desde: new Date() })
+        await setDoc(membroRef, { uid: usuario.uid, desde: serverTimestamp() })
         await setDoc(userRef, { comunidadesInscritas: arrayUnion(id) }, { merge: true })
         await setDoc(comRef, { membrosCount: increment(1) }, { merge: true })
       }
@@ -122,6 +132,7 @@ function Comunidades({ usuario }) {
   return (
     <div style={{ maxWidth: '650px', margin: '0 auto', padding: '20px', fontFamily: '"Segoe UI", Tahoma, sans-serif' }}>
       
+      {/* BARRA DE PESQUISA E BOTÃO NOVO */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '25px' }}>
         <input 
           placeholder="Pesquisar comunidades..." 
@@ -133,50 +144,56 @@ function Comunidades({ usuario }) {
         </button>
       </div>
 
+      {/* FORMULÁRIO DE CRIAÇÃO */}
       {criando && (
         <div style={{ background: '#f9f9f9', padding: '20px', borderRadius: '12px', marginBottom: '30px', border: '2px solid #009c3b', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-          <h3 style={{ marginTop: 0, color: '#002776' }}>Criar nova comunidade</h3>
+          <h3 style={{ marginTop: 0, color: '#002776' }}>Criar nova egrégora</h3>
           
           <label style={s.label}>Nome da Comunidade</label>
           <input 
             style={s.input} 
             value={novaComunidade.nome} 
-            placeholder="Ex: Desenvolvedores SP" 
+            placeholder="Ex: Alquimia das Flores" 
             onChange={e => {
               const nome = e.target.value
               setNovaComunidade({
                 ...novaComunidade, 
                 nome: nome,
-                slug: formatarSlug(nome) // Captura automática aqui!
+                slug: formatarSlug(nome)
               })
             }} 
           />
           
-          {/* Mostra o slug para o usuário saber qual será o link */}
           <p style={{ fontSize: '11px', color: '#666', marginTop: '-5px', marginBottom: '10px' }}>
-            Link: ei-social.web.app/comunidades/<strong>{novaComunidade.slug}</strong>
+            Link permanente: /comunidades/<strong>{novaComunidade.slug || '...'}</strong>
           </p>
 
           <label style={s.label}>Descrição</label>
-          <textarea style={{ ...s.input, height: '80px', fontFamily: 'inherit' }} value={novaComunidade.descricao} placeholder="Fale sobre a comunidade..." onChange={e => setNovaComunidade({...novaComunidade, descricao: e.target.value})} />
+          <textarea 
+            style={{ ...s.input, height: '80px', fontFamily: 'inherit' }} 
+            value={novaComunidade.descricao} 
+            placeholder="Qual o propósito deste espaço?" 
+            onChange={e => setNovaComunidade({...novaComunidade, descricao: e.target.value})} 
+          />
           
           <div style={{ display: 'flex', gap: '10px' }}>
             <div style={{ flex: 1 }}>
               <label style={s.label}>Categoria</label>
-              <input style={s.input} value={novaComunidade.categoria} placeholder="Ex: Tecnologia" onChange={e => setNovaComunidade({...novaComunidade, categoria: e.target.value})} />
+              <input style={s.input} value={novaComunidade.categoria} placeholder="Ex: Gastronomia" onChange={e => setNovaComunidade({...novaComunidade, categoria: e.target.value})} />
             </div>
             <div style={{ width: '90px' }}>
               <label style={s.label}>Emoji</label>
-              <input style={s.input} value={novaComunidade.emoji} placeholder="🚀" onChange={e => setNovaComunidade({...novaComunidade, emoji: e.target.value})} />
+              <input style={s.input} value={novaComunidade.emoji} placeholder="🌸" onChange={e => setNovaComunidade({...novaComunidade, emoji: e.target.value})} />
             </div>
           </div>
           
           <button onClick={salvarComunidade} style={{ width: '100%', padding: '12px', background: '#009c3b', color: 'white', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', fontSize: '16px' }}>
-            Salvar e Entrar
+            Criar e Ingressar
           </button>
         </div>
       )}
 
+      {/* GRID DE LISTAGEM */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '15px' }}>
         {filtradas.map(c => {
           const participando = minhasComunidades.includes(c.id)
@@ -198,7 +215,17 @@ function Comunidades({ usuario }) {
                   e.stopPropagation() 
                   toggleParticipacao(c.id, participando)
                 }}
-                style={{ width: '100%', padding: '8px', borderRadius: '6px', border: 'none', background: participando ? '#f0f0f0' : '#002776', color: participando ? '#555' : 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}
+                style={{ 
+                  width: '100%', 
+                  padding: '8px', 
+                  borderRadius: '6px', 
+                  border: 'none', 
+                  background: participando ? '#f0f0f0' : '#002776', 
+                  color: participando ? '#555' : 'white', 
+                  cursor: 'pointer', 
+                  fontWeight: 'bold', 
+                  fontSize: '13px' 
+                }}
               >
                 {participando ? 'Sair' : 'Participar'}
               </button>
@@ -210,4 +237,4 @@ function Comunidades({ usuario }) {
   )
 }
 
-export default Comunidades
+export default Comunidades;
