@@ -1,18 +1,17 @@
 import { useState, useEffect } from 'react'
 import { db } from './firebase-config'
-import { useNavigate } from 'react-router-dom' // ADICIONADO PARA CONECTAR AS PÁGINAS
+import { useNavigate } from 'react-router-dom'
 import {
   collection, addDoc, onSnapshot, doc, 
   query, orderBy, setDoc, increment, arrayUnion, arrayRemove, deleteDoc
 } from 'firebase/firestore'
 
 function Comunidades({ usuario }) {
-  const navigate = useNavigate() // INICIALIZADO
+  const navigate = useNavigate()
   const [comunidades, setComunidades] = useState([])
   const [minhasComunidades, setMinhasComunidades] = useState([])
   const [criando, setCriando] = useState(false)
   const [busca, setBusca] = useState('')
-  // Adicionado 'descricao' no estado
   const [novaComunidade, setNovaComunidade] = useState({ nome: '', descricao: '', categoria: '', emoji: '' })
 
   useEffect(() => {
@@ -42,13 +41,18 @@ function Comunidades({ usuario }) {
       return
     }
 
-    // GERA O SLUG PARA A PAGINACOMUNIDADE ENCONTRAR
-    const slugGerado = novaComunidade.nome.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^\w-]+/g, '')
+    // GERA O SLUG LIMPO (remove espaços e caracteres especiais)
+    const slugGerado = novaComunidade.nome
+      .toLowerCase()
+      .trim()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, "") // Remove acentos
+      .replace(/\s+/g, '-') // Espaço vira hífen
+      .replace(/[^\w-]+/g, '') // Remove o que não for letra ou hífen
 
     try {
       const docRef = await addDoc(collection(db, 'comunidades'), {
         nome: novaComunidade.nome,
-        slug: slugGerado, // SALVANDO O SLUG
+        slug: slugGerado,
         descricao: novaComunidade.descricao,
         categoria: novaComunidade.categoria || 'Geral',
         emoji: novaComunidade.emoji || '👥',
@@ -146,8 +150,11 @@ function Comunidades({ usuario }) {
           return (
             <div key={c.id} style={{ background: 'white', padding: '20px', borderRadius: '15px', border: participando ? '2px solid #009c3b' : '1px solid #ddd', textAlign: 'center' }}>
               
-              {/* ÁREA CLICÁVEL PARA IR PARA A PÁGINA DA COMUNIDADE */}
-              <div onClick={() => navigate(`/comunidades/${c.slug}`)} style={{ cursor: 'pointer' }}>
+              {/* CORREÇÃO DO CLIQUE: Usa o slug se existir, senão usa o ID do documento */}
+              <div 
+                onClick={() => navigate(`/comunidades/${c.slug || c.id}`)} 
+                style={{ cursor: 'pointer' }}
+              >
                 <div style={{ fontSize: '40px', marginBottom: '10px' }}>{c.emoji || '👥'}</div>
                 <h4 style={{ margin: '5px 0', fontSize: '16px', color: '#1a1a1a' }}>{c.nome}</h4>
               </div>
@@ -156,7 +163,7 @@ function Comunidades({ usuario }) {
               
               <button 
                 onClick={(e) => {
-                  e.stopPropagation() // NÃO deixa abrir a página ao clicar no botão de sair/entrar
+                  e.stopPropagation() 
                   toggleParticipacao(c.id, participando)
                 }}
                 style={{ width: '100%', padding: '8px', borderRadius: '6px', border: 'none', background: participando ? '#f0f0f0' : '#002776', color: participando ? '#555' : 'white', cursor: 'pointer', fontWeight: 'bold', fontSize: '13px' }}
