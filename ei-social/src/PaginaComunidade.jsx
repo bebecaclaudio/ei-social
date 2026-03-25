@@ -68,6 +68,7 @@ function PaginaComunidade({ usuario }) {
   return (
     <div style={{ background: '#f0f2f5', minHeight: '100vh', paddingBottom: '30px' }}>
       
+      {/* BANNER COM RESPIRO E AVATAR DINÂMICO */}
       <div style={containerBannerGeral}>
         <div style={estiloBanner(comu.capaUrl || '#002663')}>
           <div style={avatarTopoEsquerdo}>{comu.emoji || '✨'}</div>
@@ -75,10 +76,12 @@ function PaginaComunidade({ usuario }) {
       </div>
 
       <div style={gridMestre(isMobile)}>
+        {/* SIDEBAR ESQUERDA */}
         <aside style={isMobile ? fullWidth : colLateral}>
           <div style={cardBranco}>
             <h1 style={tituloPretoSidebar}>{comu.nome}</h1>
-            <span style={badgeCategoria}>{comu.categoria}</span>
+            <span style={badgeCategoriaAzulClaro}>{comu.categoria}</span>
+            <div style={divisor} />
             <p style={textoDesc}>{comu.descricao}</p>
             {souDono && (
               <button onClick={() => navigate(`/comunidades/${id}/gerenciar`)} style={btnGerenciarAmarelo}>
@@ -88,6 +91,7 @@ function PaginaComunidade({ usuario }) {
           </div>
         </aside>
 
+        {/* FEED CENTRAL */}
         <main style={colCentro(isMobile)}>
           <div style={cardPostar}>
             <div style={{display: 'flex', gap: '12px', alignItems: 'flex-start'}}>
@@ -115,10 +119,12 @@ function PaginaComunidade({ usuario }) {
           {posts.map(p => <CardPostComunidade key={p.id} p={p} usuario={usuario} slugComu={id} />)}
         </main>
 
+        {/* SIDEBAR DIREITA */}
         {!isMobile && (
           <aside style={colLateral}>
             <div style={cardBranco}>
-              <h4 style={subTitulo}>MEMBROS</h4>
+              <h4 style={tituloPretoMembros}>MEMBROS</h4>
+              <div style={divisorPequeno} />
               <div style={gridMembros}>
                 <AvatarRedondo uid={usuario?.uid} tamanho="40px" />
                 <button style={btnMais}>+</button>
@@ -140,33 +146,25 @@ const colLateral = { width: '280px', position: 'sticky', top: '20px', alignSelf:
 const colCentro = (mob) => ({ flex: 1, maxWidth: mob ? '100%' : '520px' });
 const fullWidth = { width: '100%' };
 const cardBranco = { background: 'white', padding: '20px', borderRadius: '20px', border: '1px solid #e1e8ed' };
-const tituloPretoSidebar = { fontSize: '24px', fontWeight: '900', color: '#000', margin: '0' };
-const badgeCategoria = { color: '#5865f2', fontSize: '13px', fontWeight: 'bold' };
-const textoDesc = { fontSize: '14px', color: '#555', marginTop: '10px' };
+
+// Tipografia e Cores
+const tituloPretoSidebar = { fontSize: '22px', fontWeight: '900', color: '#000', margin: '0 0 10px', lineHeight: '1.2' };
+const tituloPretoMembros = { fontSize: '18px', fontWeight: '900', color: '#000', margin: '0' };
+const badgeCategoriaAzulClaro = { background: '#e0f7fa', color: '#002663', fontSize: '12px', fontWeight: 'bold', padding: '5px 12px', borderRadius: '15px', display: 'inline-block', marginBottom: '12px' };
+const divisor = { height: '1px', background: '#f0f2f5', margin: '15px 0' };
+const divisorPequeno = { height: '1px', background: '#f0f2f5', margin: '10px 0' };
+const textoDesc = { fontSize: '14px', color: '#555', marginTop: '10px', lineHeight: '1.4' };
+
+// Inputs e Botões
 const cardPostar = { background: 'white', padding: '18px', borderRadius: '22px', border: '1px solid #e1e8ed', marginBottom: '20px' };
-
-const inputAreaAjustado = { 
-  width: '100%', 
-  boxSizing: 'border-box', 
-  border: 'none', 
-  background: '#f8f9fa', 
-  borderRadius: '12px', 
-  minHeight: '90px', 
-  padding: '15px', 
-  outline: 'none', 
-  resize: 'none', 
-  fontSize: '16px', 
-  color: '#1a1a1a' // Texto Escuro no TextArea
-};
-
+const inputAreaAjustado = { width: '100%', boxSizing: 'border-box', border: 'none', background: '#f8f9fa', borderRadius: '12px', minHeight: '90px', padding: '15px', outline: 'none', resize: 'none', fontSize: '16px', color: '#1a1a1a' };
 const botoesAcaoPost = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '15px' };
 const grupoEsquerdaAcao = { display: 'flex', alignItems: 'center', gap: '15px' };
 const textosEscuros = { fontSize: '11px', color: '#444', fontWeight: 'bold' };
 const btnRascunho = { background: 'none', border: 'none', color: '#444', cursor: 'pointer', fontSize: '12px', textDecoration: 'underline' };
 const btnPostVerde = { background: '#00a859', color: 'white', border: 'none', padding: '10px 30px', borderRadius: '12px', fontWeight: 'bold', cursor: 'pointer' };
-const btnGerenciarAmarelo = { width: '100%', padding: '12px', background: '#FFD700', border: 'none', borderRadius: '12px', fontWeight: 'bold', marginTop: '20px', color: '#000' };
-const subTitulo = { fontSize: '11px', color: '#aaa', fontWeight: '900', textAlign: 'center' };
-const gridMembros = { display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '15px' };
+const btnGerenciarAmarelo = { width: '100%', padding: '12px', background: '#FFD700', border: 'none', borderRadius: '12px', fontWeight: 'bold', marginTop: '20px', color: '#000', cursor: 'pointer' };
+const gridMembros = { display: 'flex', gap: '8px', justifyContent: 'flex-start', marginTop: '15px' };
 const btnMais = { width: '40px', height: '40px', borderRadius: '50%', border: 'none', background: '#eee' };
 
 export default PaginaComunidade;
