@@ -43,7 +43,7 @@ const CardPostComunidade = ({ p, usuario, slugComu }) => {
   // --- FUNÇÕES DE INTERAÇÃO (MANTIDAS) ---
   const curtir = async () => {
     if (!usuario) return;
-    const ref = doc(db, "posts_comunidade", p.id); // Ajustado para sua coleção sem 's'
+    const ref = doc(db, "posts_comunidade", p.id);
     const jaCurtiu = p.curtidas?.includes(usuario.uid);
     await updateDoc(ref, {
       curtidas: jaCurtiu ? arrayRemove(usuario.uid) : arrayUnion(usuario.uid)
@@ -69,6 +69,7 @@ const CardPostComunidade = ({ p, usuario, slugComu }) => {
   };
 
   const souDono = usuario?.uid === p.autorUid;
+  const jaCurtiuPost = p.curtidas?.includes(usuario?.uid);
 
   return (
     <div style={cardEstilo}>
@@ -105,7 +106,7 @@ const CardPostComunidade = ({ p, usuario, slugComu }) => {
         </div>
       </div>
 
-      {/* CONTEÚDO: SEMPRE À ESQUERDA + QUEBRA DE TEXTO SEGURA */}
+      {/* CONTEÚDO */}
       <div style={corpo}>
         {editando ? (
           <div>
@@ -118,17 +119,21 @@ const CardPostComunidade = ({ p, usuario, slugComu }) => {
         )}
       </div>
 
-      {/* DATA E HORA NO CANTO ESQUERDO INFERIOR */}
+      {/* DATA E HORA */}
       <div style={dataHoraRow}>
         <span>{formatarDataHora(p.data)}</span>
       </div>
 
       <div style={divisor} />
 
-      {/* AÇÕES (MANTIDAS) */}
+      {/* AÇÕES */}
       <div style={acoes}>
-        <button onClick={curtir} style={p.curtidas?.includes(usuario?.uid) ? btnAtivo : btnFrio} title="Curtir">
-          ❤️ {p.curtidas?.length || 0}
+        <button 
+          onClick={curtir} 
+          style={jaCurtiuPost ? btnAtivo : btnFrio} 
+          title="Curtir"
+        >
+          {jaCurtiuPost ? '❤️' : '🤍'} {p.curtidas?.length || 0}
         </button>
         <button style={btnFrio} title="Comentar">💬</button>
         <button style={btnFrio} title="Repostar">🔄</button>
@@ -143,21 +148,21 @@ const CardPostComunidade = ({ p, usuario, slugComu }) => {
   );
 };
 
-// --- ESTILOS AJUSTADOS ---
+// --- ESTILOS ---
 const cardEstilo = { background: '#fff', padding: '20px', borderRadius: '24px', border: '1px solid #e1e8ed', marginBottom: '15px' };
 const header = { display: 'flex', justifyContent: 'space-between', marginBottom: '15px', alignItems: 'center' };
 const avatar = { width: '42px', height: '42px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #eee' };
 const nome = { fontSize: '15px', fontWeight: 'bold', color: '#1a1a1a', display: 'block' };
 const dataAtras = { fontSize: '11px', color: '#888' };
-const corpo = { marginBottom: '15px', textAlign: 'left' }; // Garante alinhamento à esquerda
+const corpo = { marginBottom: '15px', textAlign: 'left' };
 
 const textoEstilo = { 
   fontSize: '16px', 
   lineHeight: '1.5', 
   whiteSpace: 'pre-wrap', 
   color: '#1c1e21',
-  textAlign: 'left',          // Texto à esquerda
-  overflowWrap: 'anywhere',  // Impede de vazar (oooooo)
+  textAlign: 'left',
+  overflowWrap: 'anywhere',
   wordBreak: 'break-word',
   margin: 0
 };
@@ -166,13 +171,13 @@ const dataHoraRow = {
   fontSize: '11px', 
   color: '#aaa', 
   marginBottom: '10px', 
-  textAlign: 'left'           // Data à esquerda
+  textAlign: 'left'
 };
 
 const divisor = { height: '1px', background: '#f0f2f5', marginBottom: '10px' };
 const acoes = { display: 'flex', gap: '20px', alignItems: 'center', position: 'relative' };
-const btnFrio = { background: 'none', border: 'none', cursor: 'pointer', color: '#666', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '5px' };
-const btnAtivo = { ...btnFrio, color: '#f91880' }; // Cor de coração ativo
+const btnFrio = { background: 'none', border: 'none', cursor: 'pointer', color: '#666', fontSize: '18px', display: 'flex', alignItems: 'center', gap: '5px', padding: '5px 10px', borderRadius: '20px' };
+const btnAtivo = { ...btnFrio, color: '#f91880', background: '#f9188015' }; // Fundo rosa suave igual ao feed
 const alcance = { fontSize: '12px', color: '#999', position: 'absolute', right: 0 };
 const btnMenu = { background: 'none', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#666' };
 const dropdown = { position: 'absolute', right: 0, top: '100%', background: 'white', boxShadow: '0 5px 15px rgba(0,0,0,0.1)', borderRadius: '12px', zIndex: 10, width: '160px', overflow: 'hidden' };
