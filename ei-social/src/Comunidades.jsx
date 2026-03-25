@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { db } from './firebase-config'
 import {
   collection, addDoc, onSnapshot, doc, 
-  query, orderBy, setDoc, updateDoc, increment, arrayUnion, arrayRemove
+  query, orderBy, setDoc, increment, arrayUnion, arrayRemove
 } from 'firebase/firestore'
 
 function Comunidades({ usuario }) {
@@ -14,13 +14,14 @@ function Comunidades({ usuario }) {
   const [busca, setBusca] = useState('')
   const [novaComunidade, setNovaComunidade] = useState({ nome: '', categoria: '', emoji: '' })
 
+  // --- FUNÇÃO AUXILIAR: Transforma "Nome da Comu" em "nome-da-comu" ---
   const gerarSlug = (texto) => {
     return texto
       .toLowerCase()
       .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/[^\w ]+/g, '')        
-      .replace(/ +/g, '-')           
+      .replace(/[\u0300-\u036f]/g, "") // Remove acentos
+      .replace(/[^\w ]+/g, '')        // Remove símbolos especiais
+      .replace(/ +/g, '-')           // Troca espaços por traços
       .trim();
   };
 
@@ -51,16 +52,16 @@ function Comunidades({ usuario }) {
       return
     }
 
+    // Criamos o slug antes de salvar
     const slugBonito = gerarSlug(novaComunidade.nome);
 
     try {
       const docRef = await addDoc(collection(db, 'comunidades'), {
         nome: novaComunidade.nome,
-        slug: slugBonito,
+        slug: slugBonito, // <--- SALVANDO O SLUG NO FIREBASE
         categoria: novaComunidade.categoria || 'Geral',
         emoji: novaComunidade.emoji || '👥',
         membrosCount: 1,
-        membros: [usuario.uid], // <--- ADICIONA VOCÊ COMO PRIMEIRO MEMBRO NA LISTA
         criadoPor: usuario.uid,
         dataCriacao: new Date()
       })
@@ -72,6 +73,7 @@ function Comunidades({ usuario }) {
       setNovaComunidade({ nome: '', categoria: '', emoji: '' })
       setCriando(false)
       
+      // Agora navegamos para a URL bonitinha
       navigate(`/comunidades/${slugBonito}`)
     } catch (e) { 
       console.error("Erro ao salvar:", e)
@@ -85,16 +87,13 @@ function Comunidades({ usuario }) {
     const comRef = doc(db, 'comunidades', id)
 
     try {
-      // 1. Atualiza a lista de inscritos do Usuário
-      await updateDoc(userRef, {
+      await setDoc(userRef, {
         comunidadesInscritas: jaParticipa ? arrayRemove(id) : arrayUnion(id)
-      })
+      }, { merge: true })
 
-      // 2. Atualiza a lista de membros e o contador da Comunidade
-      await updateDoc(comRef, {
-        membros: jaParticipa ? arrayRemove(usuario.uid) : arrayUnion(usuario.uid),
+      await setDoc(comRef, {
         membrosCount: increment(jaParticipa ? -1 : 1)
-      })
+      }, { merge: true })
     } catch (e) { 
       console.error("Erro:", e) 
     }
@@ -139,8 +138,8 @@ function Comunidades({ usuario }) {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '15px' }}>
         {filtradas.map(c => {
-          // CHECAGEM DUPLA: Verifica na lista de inscritos do usuário ou se o UID dele está no array de membros da comunidade
-          const participando = minhasComunidades.includes(c.id) || c.membros?.includes(usuario?.uid);
+          const participando = minhasComunidades.includes(c.id)
+          // Se a comunidade já tem o campo slug, usamos ele. Se for antiga, usamos o id.
           const urlDestino = c.slug || c.id;
 
           return (
@@ -178,4 +177,4 @@ function Comunidades({ usuario }) {
   )
 }
 
-export default Comunidades;
+export default Comunidades
